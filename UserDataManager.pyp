@@ -74,6 +74,7 @@ _gList   = 1003
 _gScroll = 1004   # scroll group for entry list
 _gProp   = 1005
 _gBot    = 1006
+_gPreset = 1007
 
 _btnAdd    = 2101
 _btnDel    = 2102
@@ -83,8 +84,9 @@ _btnDown   = 2105
 _btnApply  = 2106
 _btnSave   = 2107
 _btnLoad   = 2108
-_btnPreset = 2109
 _btnClear  = 2110
+# 预设按钮基址（每个预设一个按钮）
+_btnPresetBase = 2120
 
 _edtName    = 2201
 _cmbType    = 2202
@@ -414,11 +416,11 @@ class UserDataDialog(gui.GeDialog):
         # parent_dlg: C4D 2023 传入此参数，2026 不再传入；用默认值兼容两者
         self.SetTitle(f"{PLUGIN_NAME}  v{__version__}")
         self.GroupBegin(_gRoot, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
-                        cols=1, rows=3, title="")
+                        cols=1, rows=4, title="")
         self.GroupBorderSpace(6, 6, 6, 6)
 
         # ─── 工具栏 ───
-        self.GroupBegin(_gTop, flags=c4d.BFH_SCALEFIT, cols=11, rows=1, title="")
+        self.GroupBegin(_gTop, flags=c4d.BFH_SCALEFIT, cols=10, rows=1, title="")
         self.GroupBorderSpace(0, 0, 0, 4)
         self.AddButton(_btnAdd,    flags=c4d.BFH_LEFT, initw=32, inith=24, name="＋")
         self.AddButton(_btnDel,    flags=c4d.BFH_LEFT, initw=32, inith=24, name="－")
@@ -429,12 +431,21 @@ class UserDataDialog(gui.GeDialog):
         self.AddButton(_btnSave,   flags=c4d.BFH_LEFT, initw=50, inith=24, name="保存")
         self.AddButton(_btnLoad,   flags=c4d.BFH_LEFT, initw=50, inith=24, name="加载")
         self.AddButton(_btnClear,  flags=c4d.BFH_LEFT, initw=50, inith=24, name="清空")
-        # 预设下拉按钮（替代 C4D 2026 中已移除的 GePopupMenu）
-        self.AddPopupButton(_btnPreset, flags=c4d.BFH_LEFT, initw=70)
-        self.SetString(_btnPreset, "预设 ▼")
-        for i, p in enumerate(PRESETS):
-            self.AddChild(_btnPreset, i, p["name"])
         self.AddButton(_btnApply,  flags=c4d.BFH_RIGHT, initw=120, inith=24, name="▸ 应用到对象")
+        self.GroupEnd()
+
+        # ─── 预设按钮行（水平滚动） ───
+        self.GroupBegin(_gPreset, flags=c4d.BFH_SCALEFIT, cols=1, rows=1, title="")
+        self.GroupBorderSpace(0, 0, 0, 4)
+        self.ScrollGroupBegin(0, flags=c4d.BFH_SCALEFIT,
+                              scrollflags=c4d.SCROLLGROUP_HORIZ)
+        self.GroupBegin(0, flags=c4d.BFH_SCALEFIT,
+                        cols=len(PRESETS), rows=1, title="")
+        for i, p in enumerate(PRESETS):
+            self.AddButton(_btnPresetBase + i, flags=c4d.BFH_LEFT,
+                           initw=65, inith=20, name=p["name"])
+        self.GroupEnd()
+        self.GroupEnd()
         self.GroupEnd()
 
         # ─── 主体: 列表 + 属性 ───
@@ -592,9 +603,9 @@ class UserDataDialog(gui.GeDialog):
             self._save_template()
         elif mid == _btnLoad:
             self._load_template()
-        elif mid == _btnPreset:
-            # AddPopupButton 选择触发——获取选中索引
-            idx = self.GetInt32(_btnPreset)
+        elif _btnPresetBase <= mid < _btnPresetBase + len(PRESETS):
+            # 预设按钮点击
+            idx = mid - _btnPresetBase
             if 0 <= idx < len(PRESETS):
                 preset = PRESETS[idx]
                 entries = [e.copy() for e in preset["entries"]]
@@ -932,7 +943,7 @@ class UserDataDialog(gui.GeDialog):
         gui.MessageDialog(f"已加载 {len(entries)} 个条目。")
 
     # ── 预设 ───────────────────────────────────────────────────────
-    # 使用 AddPopupButton 替代 C4D 2026 中已移除的 GePopupMenu
+    # 使用第二排按钮（水平滚动）替代原来的 AddPopupButton 下拉菜单
 
 
 # ─────────────────────────────────────────────────────────────────
