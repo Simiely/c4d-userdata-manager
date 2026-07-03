@@ -230,11 +230,17 @@ class Entry:
         bc = c4d.GetCustomDataTypeDefault(UDT.c4d_dtype(self.dtype))
         bc[c4d.DESC_NAME] = self.name
 
-        if self.dtype in (UDT.FLOAT, UDT.INTEGER, UDT.PERCENT, UDT.ANGLE):
+        if self.dtype in (UDT.FLOAT, UDT.PERCENT, UDT.ANGLE):
             bc[c4d.DESC_MIN]     = float(self.min_v)
             bc[c4d.DESC_MAX]     = float(self.max_v)
             bc[c4d.DESC_STEP]    = float(self.step)
             bc[c4d.DESC_DEFAULT] = float(self.default_v)
+
+        elif self.dtype == UDT.INTEGER:
+            bc[c4d.DESC_MIN]     = int(self.min_v)
+            bc[c4d.DESC_MAX]     = int(self.max_v)
+            bc[c4d.DESC_STEP]    = int(self.step)
+            bc[c4d.DESC_DEFAULT] = int(self.default_v)
 
         elif self.dtype == UDT.VECTOR:
             bc[c4d.DESC_MIN]     = c4d.Vector(self.min_v, self.min_v, self.min_v)
@@ -664,7 +670,7 @@ class UserDataDialog(gui.GeDialog):
         self.LayoutFlushGroup(_gListContent)
 
         # 重新构建条目行（在已存在的 ScrollGroup 内的 _gListContent 中）
-        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
+        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT,
                         cols=1, rows=len(self._entries) or 1, title="")
         for i, e in enumerate(self._entries):
             base = _ROW_BASE + i * _ROW_STRIDE
