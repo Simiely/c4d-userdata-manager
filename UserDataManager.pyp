@@ -120,10 +120,12 @@ class UDT:
         ANGLE:   c4d.DESC_UNIT_DEGREE,
         PERCENT: c4d.DESC_UNIT_PERCENT,
     }
-    _GUI_MAP = {
-        COLOR:    c4d.CUSTOMGUI_COLORFIELD,
-        DROPDOWN: c4d.CUSTOMGUI_CYCLECUSTOM,
-    }
+    # 自定义 GUI（动态检测，某些常量在老版本可能不存在）
+    _GUI_MAP = {}
+    for _const_name, _dt in [("CUSTOMGUI_COLORFIELD", COLOR),
+                              ("CUSTOMGUI_CYCLECUSTOM", DROPDOWN)]:
+        if hasattr(c4d, _const_name):
+            _GUI_MAP[_dt] = getattr(c4d, _const_name)
     _RANGE_TYPES = {FLOAT, INTEGER, PERCENT, ANGLE, VECTOR}
     _NUMERIC_TYPES = {FLOAT, INTEGER, PERCENT, ANGLE, VECTOR, COLOR}
     _ALL_TYPES = [FLOAT, INTEGER, BOOL, COLOR, VECTOR,
@@ -853,26 +855,29 @@ class UserDataDialog(gui.GeDialog):
 # ─────────────────────────────────────────────────────────────────
 
 class UserDataCommandData(c4d.plugins.CommandData):
-    """菜单命令"""
+    """菜单命令（切换式：点一次打开，再点关闭）"""
 
     def __init__(self):
         self._dlg: Optional[UserDataDialog] = None
 
     def Execute(self, doc):
-        if self._dlg is None:
+        if self._dlg is None or not self._dlg.IsOpen():
             self._dlg = UserDataDialog()
-        return self._dlg.Open(
-            dlgtype=c4d.DLG_TYPE_ASYNC,
-            pluginid=PLUGIN_ID,
-            defaultw=640,
-            defaulth=520,
-            xpos=-1, ypos=-1,
-            subid=0)
+            return self._dlg.Open(
+                dlgtype=c4d.DLG_TYPE_ASYNC,
+                pluginid=PLUGIN_ID,
+                defaultw=640,
+                defaulth=520,
+                xpos=-1, ypos=-1,
+                dialogid=0, subid=0)
+        else:
+            self._dlg.Close()
+            self._dlg = None
+            return True
 
     def RestoreLayout(self, sec_ref):
-        if self._dlg is None:
-            self._dlg = UserDataDialog()
-        return self._dlg.Restore(pluginid=PLUGIN_ID, subid=0, sec_ref=sec_ref)
+        # 异步对话框：RestoreLayout 直接返回 True 避免二次打开崩溃
+        return True
 
     def GetID(self):
         return PLUGIN_ID
