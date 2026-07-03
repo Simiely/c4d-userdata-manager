@@ -361,36 +361,36 @@ class Entry:
 # ─────────────────────────────────────────────────────────────────
 
 PRESETS = [
-    {"name": "Speed 速度",    "entries": [Entry("Speed",    UDT.FLOAT,   0, 100,   1, 50)]},
-    {"name": "Strength 强度", "entries": [Entry("Strength", UDT.PERCENT, 0, 200,   1, 100)]},
-    {"name": "Opacity 透明度", "entries": [Entry("Opacity",  UDT.PERCENT, 0, 100,   1, 100)]},
-    {"name": "Scale 缩放",    "entries": [Entry("Scale",    UDT.PERCENT, 0, 500,   1, 100)]},
-    {"name": "Color 颜色",    "entries": [Entry("Color",    UDT.COLOR,   0, 1,   0.01, 1)]},
-    {"name": "Position 位置偏移", "entries": [
+    {"name": "Speed 速度",    "btn": "Speed\n速度",    "entries": [Entry("Speed",    UDT.FLOAT,   0, 100,   1, 50)]},
+    {"name": "Strength 强度", "btn": "Strength\n强度",  "entries": [Entry("Strength", UDT.PERCENT, 0, 200,   1, 100)]},
+    {"name": "Opacity 透明度", "btn": "Opacity\n透明度", "entries": [Entry("Opacity",  UDT.PERCENT, 0, 100,   1, 100)]},
+    {"name": "Scale 缩放",    "btn": "Scale\n缩放",    "entries": [Entry("Scale",    UDT.PERCENT, 0, 500,   1, 100)]},
+    {"name": "Color 颜色",    "btn": "Color\n颜色",    "entries": [Entry("Color",    UDT.COLOR,   0, 1,   0.01, 1)]},
+    {"name": "Position 位置偏移", "btn": "Position\n位置偏移", "entries": [
         Entry("Offset.X", UDT.FLOAT, -1000, 1000, 1, 0),
         Entry("Offset.Y", UDT.FLOAT, -1000, 1000, 1, 0),
         Entry("Offset.Z", UDT.FLOAT, -1000, 1000, 1, 0),
     ]},
-    {"name": "Rotation 旋转", "entries": [
+    {"name": "Rotation 旋转", "btn": "Rotation\n旋转", "entries": [
         Entry("Rotate.X", UDT.ANGLE, 0, 360, 1, 0),
         Entry("Rotate.Y", UDT.ANGLE, 0, 360, 1, 0),
         Entry("Rotate.Z", UDT.ANGLE, 0, 360, 1, 0),
     ]},
-    {"name": "Random Seed",  "entries": [
+    {"name": "Random Seed",  "btn": "Random Seed",  "entries": [
         Entry("Seed",      UDT.INTEGER, 0, 99999, 1, 0),
         Entry("Randomize", UDT.BOOL,    0, 1, 1, True),
     ]},
-    {"name": "Count 计数",   "entries": [Entry("Count", UDT.INTEGER, 1, 1000, 1, 10)]},
-    {"name": "Enable 开关",  "entries": [Entry("Enabled", UDT.BOOL, 0, 1, 1, True)]},
-    {"name": "Falloff 衰减", "entries": [
+    {"name": "Count 计数",   "btn": "Count\n计数",   "entries": [Entry("Count", UDT.INTEGER, 1, 1000, 1, 10)]},
+    {"name": "Enable 开关",  "btn": "Enable\n开关",  "entries": [Entry("Enabled", UDT.BOOL, 0, 1, 1, True)]},
+    {"name": "Falloff 衰减", "btn": "Falloff\n衰减", "entries": [
         Entry("Radius",  UDT.FLOAT,   0, 1000, 1, 100),
         Entry("Falloff", UDT.PERCENT, 0, 100,  1, 50),
     ]},
-    {"name": "Weights 权重", "entries": [
+    {"name": "Weights 权重", "btn": "Weights\n权重", "entries": [
         Entry("Weight A", UDT.FLOAT, 0, 1, 0.01, 0.5),
         Entry("Weight B", UDT.FLOAT, 0, 1, 0.01, 0.5),
     ]},
-    {"name": "Material 材质", "entries": [
+    {"name": "Material 材质", "btn": "Material\n材质", "entries": [
         Entry("Metallic",  UDT.PERCENT, 0, 100, 1, 0),
         Entry("Roughness", UDT.PERCENT, 0, 100, 1, 50),
         Entry("Emission",  UDT.COLOR,   0, 1, 0.01, 0),
@@ -443,7 +443,7 @@ class UserDataDialog(gui.GeDialog):
                         cols=len(PRESETS), rows=1, title="")
         for i, p in enumerate(PRESETS):
             self.AddButton(_btnPresetBase + i, flags=c4d.BFH_LEFT,
-                           initw=65, inith=20, name=p["name"])
+                           initw=75, inith=30, name=p.get("btn", p["name"]))
         self.GroupEnd()
         self.GroupEnd()
         self.GroupEnd()
@@ -470,7 +470,7 @@ class UserDataDialog(gui.GeDialog):
         # 可滚动的条目列表（由 _refresh_list 动态填充）
         self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                               scrollflags=c4d.SCROLLGROUP_VERT)
-        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=1, rows=1, title="")
+        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=1, rows=0, title="")
         self.GroupEnd()  # _gListContent
         self.GroupEnd()  # ScrollGroupBegin
         self.GroupEnd()  # _gList
@@ -604,14 +604,14 @@ class UserDataDialog(gui.GeDialog):
         elif mid == _btnLoad:
             self._load_template()
         elif _btnPresetBase <= mid < _btnPresetBase + len(PRESETS):
-            # 预设按钮点击
+            # 预设按钮点击——始终追加到末尾
             idx = mid - _btnPresetBase
             if 0 <= idx < len(PRESETS):
                 preset = PRESETS[idx]
-                entries = [e.copy() for e in preset["entries"]]
-                self._replace_or_append(entries, f"预设「{preset['name']}」")
-                self._refresh_list()
-                self._update_status()
+                for e in preset["entries"]:
+                    self._entries.append(e.copy())
+                self._sel = len(self._entries) - 1
+                self._update_props()
 
         # 属性编辑
         elif mid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
@@ -680,9 +680,7 @@ class UserDataDialog(gui.GeDialog):
         # 清除旧的列表行控件
         self.LayoutFlushGroup(_gListContent)
 
-        # 重新构建条目行（在已存在的 ScrollGroup 内的 _gListContent 中）
-        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT,
-                        cols=1, rows=len(self._entries) or 1, title="")
+        # 重新构建条目行（LayoutFlushGroup 后插入点已在 _gListContent 内）
         for i, e in enumerate(self._entries):
             base = _ROW_BASE + i * _ROW_STRIDE
             is_sel = (i == self._sel)
@@ -709,7 +707,6 @@ class UserDataDialog(gui.GeDialog):
                                initw=100, name=e.display_value())
             self.GroupEnd()
 
-        self.GroupEnd()  # _gListContent
         self.LayoutChanged(_gScroll)
 
     # ── 属性面板 ───────────────────────────────────────────────────
