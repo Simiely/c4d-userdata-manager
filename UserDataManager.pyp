@@ -444,10 +444,10 @@ class UserDataDialog(gui.GeDialog):
 
         # 列表表头
         self.GroupBegin(0, flags=c4d.BFH_SCALEFIT, cols=4, rows=1, title="")
-        self.AddStaticText(0, flags=c4d.BFH_LEFT, initw=30,  name="#", border=c4d.BORDER_THIN_IN)
-        self.AddStaticText(0, flags=c4d.BFH_SCALEFIT, initw=130, name="名称", border=c4d.BORDER_THIN_IN)
-        self.AddStaticText(0, flags=c4d.BFH_SCALEFIT, initw=110, name="类型", border=c4d.BORDER_THIN_IN)
-        self.AddStaticText(0, flags=c4d.BFH_SCALEFIT, initw=100, name="默认值", border=c4d.BORDER_THIN_IN)
+        self.AddStaticText(0, c4d.BFH_LEFT,          30, 0, "#",     c4d.BORDER_THIN_IN)
+        self.AddStaticText(0, c4d.BFH_SCALEFIT,     130, 0, "名称",  c4d.BORDER_THIN_IN)
+        self.AddStaticText(0, c4d.BFH_SCALEFIT,     110, 0, "类型",  c4d.BORDER_THIN_IN)
+        self.AddStaticText(0, c4d.BFH_SCALEFIT,     100, 0, "默认值", c4d.BORDER_THIN_IN)
         self.GroupEnd()
 
         # 可滚动的条目列表（由 _refresh_list 动态填充）
