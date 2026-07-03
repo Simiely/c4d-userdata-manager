@@ -220,10 +220,12 @@ class Entry:
         bc[c4d.DESC_NAME] = self.name
 
         if self.dtype in (UDT.FLOAT, UDT.PERCENT, UDT.ANGLE):
-            bc[c4d.DESC_MIN]     = float(self.min_v)
-            bc[c4d.DESC_MAX]     = float(self.max_v)
-            bc[c4d.DESC_STEP]    = float(self.step)
-            bc[c4d.DESC_DEFAULT] = float(self.default_v)
+            # C4D 内部百分比以 0-1 存储，UI 层仍按 0-100 显示
+            scale = 100.0 if self.dtype == UDT.PERCENT else 1.0
+            bc[c4d.DESC_MIN]     = float(self.min_v) / scale
+            bc[c4d.DESC_MAX]     = float(self.max_v) / scale
+            bc[c4d.DESC_STEP]    = float(self.step) / scale
+            bc[c4d.DESC_DEFAULT] = float(self.default_v) / scale
 
         elif self.dtype == UDT.INTEGER:
             bc[c4d.DESC_MIN]     = int(self.min_v)
@@ -250,15 +252,35 @@ class Entry:
             bc[c4d.DESC_DEFAULT] = int(float(self.default_v or 0))
             self._build_dropdown(bc)
 
-        # 单位
+        # 单位：仅当存在有效单位时才写入，避免 DESC_UNIT=0 导致 FLOAT 等类型异常
         u = UDT.c4d_unit(self.dtype)
-        bc[c4d.DESC_UNIT] = u if u != _DESC_UNIT_NONE else self.unit
+        if u != _DESC_UNIT_NONE:
+            bc[c4d.DESC_UNIT] = u
+        elif self.unit != _DESC_UNIT_NONE:
+            bc[c4d.DESC_UNIT] = self.unit
 
         # 分组短名
         if self.group.strip():
             bc[c4d.DESC_SHORT_NAME] = self.group.strip()
 
         return bc
+
+    def get_c4d_value(self):
+        """返回可直接写入对象参数值的 Python 对象（处理百分比 0-100 → 0-1 等转换）"""
+        if self.dtype == UDT.BOOL:
+            return int(bool(self.default_v))
+        elif self.dtype == UDT.COLOR:
+            return self._parse_color(self.default_v)
+        elif self.dtype == UDT.VECTOR:
+            return c4d.Vector(self.default_v, self.default_v, self.default_v)
+        elif self.dtype == UDT.INTEGER or self.dtype == UDT.DROPDOWN:
+            return int(float(self.default_v or 0))
+        elif self.dtype == UDT.PERCENT:
+            return float(self.default_v) / 100.0
+        elif self.dtype in (UDT.STRING, UDT.FILENAME):
+            return str(self.default_v or "")
+        else:  # FLOAT, ANGLE
+            return float(self.default_v)
 
     def _parse_color(self, val) -> c4d.Vector:
         if isinstance(val, (int, float)):
@@ -426,7 +448,7 @@ class UserDataDialog(gui.GeDialog):
                         cols=len(PRESETS), rows=1, title="")
         for i, p in enumerate(PRESETS):
             self.AddButton(_btnPresetBase + i, flags=c4d.BFH_LEFT,
-                           initw=85, inith=30, name=p.get("btn", p["name"]))
+                           initw=85, inith=24, name=p.get("btn", p["name"]))
         self.GroupEnd()
         self.GroupEnd()
         self.GroupEnd()
@@ -800,6 +822,9 @@ class UserDataDialog(gui.GeDialog):
                     bc = entry.build_bc()
                     did = obj.AddUserData(bc)
                     if did is not None:
+                        # AddUserData 不总能从 DESC_DEFAULT 正确初始化值，
+                        # 显式写入一次以确保默认值生效
+                        obj[did] = entry.get_c4d_value()
                         added += 1
                     else:
                         msg = f"{obj.GetName()}: {entry.name} → AddUserData 返回空"
