@@ -82,6 +82,7 @@ _btnApply  = 2106
 _btnSave   = 2107
 _btnLoad   = 2108
 _btnClear  = 2110
+_btnClearObjData = 2111  # 清空对象的用户数据
 # 预设按钮基址（每个预设一个按钮）
 _btnPresetBase = 2120
 
@@ -425,7 +426,7 @@ class UserDataDialog(gui.GeDialog):
         self.GroupBorderSpace(6, 6, 6, 6)
 
         # ─── 工具栏 ───
-        self.GroupBegin(_gTop, flags=c4d.BFH_SCALEFIT, cols=10, rows=1, title="")
+        self.GroupBegin(_gTop, flags=c4d.BFH_SCALEFIT, cols=11, rows=1, title="")
         self.GroupBorderSpace(0, 0, 0, 4)
         self.AddButton(_btnAdd,    flags=c4d.BFH_LEFT, initw=32, inith=24, name="＋")
         self.AddButton(_btnDel,    flags=c4d.BFH_LEFT, initw=32, inith=24, name="－")
@@ -436,6 +437,7 @@ class UserDataDialog(gui.GeDialog):
         self.AddButton(_btnSave,   flags=c4d.BFH_LEFT, initw=50, inith=24, name="保存")
         self.AddButton(_btnLoad,   flags=c4d.BFH_LEFT, initw=50, inith=24, name="加载")
         self.AddButton(_btnClear,  flags=c4d.BFH_LEFT, initw=50, inith=24, name="清空")
+        self.AddButton(_btnClearObjData, flags=c4d.BFH_LEFT, initw=90, inith=24, name="清空对象")
         self.AddButton(_btnApply,  flags=c4d.BFH_RIGHT, initw=120, inith=24, name="▸ 应用到对象")
         self.GroupEnd()
 
@@ -602,6 +604,8 @@ class UserDataDialog(gui.GeDialog):
             self._move(1)
         elif mid == _btnClear:
             self._clear_all()
+        elif mid == _btnClearObjData:
+            self._clear_object_data()
         elif mid == _btnApply:
             self._apply_to_objects()
         elif mid == _btnSave:
@@ -676,6 +680,42 @@ class UserDataDialog(gui.GeDialog):
             self._entries.clear()
             self._sel = -1
             self._update_props()
+
+    def _clear_object_data(self):
+        """清空选中对象的所有用户数据"""
+        doc = c4d.documents.GetActiveDocument()
+        if not doc:
+            return
+
+        objs = doc.GetActiveObjects(c4d.GETACTIVEOBJECTFLAGS_SELECTIONORDER)
+        if not objs:
+            gui.MessageDialog("请在场景中选择一个或多个对象。")
+            return
+
+        # 确认对话框
+        names = "\n".join(obj.GetName() for obj in objs[:5])
+        if len(objs) > 5:
+            names += f"\n...及其他 {len(objs)-5} 个对象"
+        if not gui.QuestionDialog(f"确定要清空以下对象的所有用户数据吗？\n\n{names}"):
+            return
+
+        removed = 0
+        doc.StartUndo()
+        for obj in objs:
+            if not obj:
+                continue
+            doc.AddUndo(c4d.UNDOTYPE_CHANGE, obj)
+            # 遍历并删除所有用户数据
+            udc = obj.GetUserDataContainer()
+            if udc:
+                dids = [did for did in udc]
+                for did in reversed(dids):
+                    if obj.RemoveUserData(did):
+                        removed += 1
+        doc.EndUndo()
+        c4d.EventAdd()
+
+        gui.MessageDialog(f"已清空 {len(objs)} 个对象上的 {removed} 条用户数据。")
 
     # ── 列表刷新 ───────────────────────────────────────────────────
     # C4D 2026 移除了 AddListView / FreezeListView / ThawListView 等，
@@ -972,7 +1012,7 @@ class UserDataCommandData(c4d.plugins.CommandData):
         return self._dlg.Open(
             dlgtype=c4d.DLG_TYPE_ASYNC,
             pluginid=PLUGIN_ID,
-            defaultw=1300,
+            defaultw=1200,
             defaulth=600,
             xpos=-1, ypos=-1,
             subid=0)
