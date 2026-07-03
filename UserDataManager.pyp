@@ -23,7 +23,7 @@ import json
 import os
 from typing import Optional
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ class UDT:
                   ANGLE, PERCENT, STRING, DROPDOWN, FILENAME]
 
     @classmethod
-    def all_types(cls):
+    def list(cls):
         return cls._ALL_TYPES
 
     @classmethod
@@ -200,10 +200,10 @@ class Entry:
         "default_v", "unit", "group", "desc", "dd_items",
     )
 
-    def __init__(self, name: str = "参数", dtype: int = UDT.FLOAT,
-                 min_v: float = 0.0, max_v: float = 100.0, step: float = 1.0,
-                 default_v: float = 50.0, unit: int = _DESC_UNIT_NONE,
-                 group: str = "", desc: str = "", dd_items: str = "Item 1\nItem 2\nItem 3"):
+    def __init__(self, name="Param", dtype=UDT.FLOAT,
+                 min_v=0.0, max_v=100.0, step=1.0,
+                 default_v=50.0, unit=_DESC_UNIT_NONE,
+                 group="", desc="", dd_items="Item 1\nItem 2\nItem 3"):
         self.name = name
         self.dtype = dtype
         self.min_v = min_v
@@ -222,7 +222,7 @@ class Entry:
 
         if self.dtype in (UDT.FLOAT, UDT.PERCENT, UDT.ANGLE):
             # C4D 内部百分比以 0-1 存储，UI 层仍按 0-100 显示
-            scale: float = 100.0 if self.dtype == UDT.PERCENT else 1.0
+            scale = 100.0 if self.dtype == UDT.PERCENT else 1.0
             bc[c4d.DESC_MIN]     = float(self.min_v) / scale
             bc[c4d.DESC_MAX]     = float(self.max_v) / scale
             bc[c4d.DESC_STEP]    = float(self.step) / scale
@@ -322,7 +322,7 @@ class Entry:
     @classmethod
     def from_dict(cls, d: dict):
         return cls(
-            name=d.get("name", "参数"),
+            name=d.get("name", "Param"),
             dtype=d.get("type", UDT.FLOAT),
             min_v=d.get("min", 0.0),
             max_v=d.get("max", 100.0),
@@ -495,7 +495,7 @@ class UserDataDialog(gui.GeDialog):
         # 类型
         self.AddStaticText(0, flags=c4d.BFH_LEFT, name="类型:")
         self.AddComboBox(_cmbType, c4d.BFH_SCALEFIT, 1)
-        for dt in UDT.all_types():
+        for dt in UDT.list():
             self.AddChild(_cmbType, dt, UDT.name(dt))
 
         # 分组
@@ -572,9 +572,12 @@ class UserDataDialog(gui.GeDialog):
             chn = bc[c4d.BFM_INPUT_CHANNEL]
             if chn == c4d.BFM_INPUT_KEYBOARD:
                 key = bc[c4d.BFM_INPUT_VALUE]
+                # Delete / Backspace 删除选中条目
                 if key in (c4d.KEY_DELETE, c4d.KEY_BACKSPACE) and \
                    self._get_entry():
                     self._del()
+                    self._refresh_list()
+                    self._update_status()
                     return True
             return True
 
@@ -586,9 +589,9 @@ class UserDataDialog(gui.GeDialog):
                 self._update_props()
                 self._update_status()
                 self._refresh_list()
-            return True
+                return True
 
-        # ── 操作按钮 ──
+        # 操作按钮
         if mid == _btnAdd:
             self._add()
         elif mid == _btnDel:
@@ -610,16 +613,26 @@ class UserDataDialog(gui.GeDialog):
         elif mid == _btnLoad:
             self._load_template()
         elif _btnPresetBase <= mid < _btnPresetBase + len(PRESETS):
-            self._apply_preset(mid - _btnPresetBase)
+            # 预设按钮点击——始终追加到末尾
+            idx = mid - _btnPresetBase
+            if 0 <= idx < len(PRESETS):
+                preset = PRESETS[idx]
+                for e in preset["entries"]:
+                    self._entries.append(e.copy())
+                self._sel = len(self._entries) - 1
+                self._update_props()
+
+        # 属性编辑
         elif mid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
                      _edtMin, _edtMax, _edtStep, _edtDefault,
                      _cmbType, _cmbUnit):
             self._update_entry_from_ui()
+            # 切换类型时立即刷新属性面板
             if mid == _cmbType:
                 self._update_props()
-            self._refresh_list()
-            self._update_status()
 
+        self._refresh_list()
+        self._update_status()
         return True
 
     # ── 增删改 ─────────────────────────────────────────────────────
@@ -628,8 +641,6 @@ class UserDataDialog(gui.GeDialog):
         self._entries.append(Entry())
         self._sel = len(self._entries) - 1
         self._update_props()
-        self._refresh_list()
-        self._update_status()
 
     def _del(self):
         if not (0 <= self._sel < len(self._entries)):
@@ -640,8 +651,6 @@ class UserDataDialog(gui.GeDialog):
         del self._entries[self._sel]
         self._sel = min(self._sel, len(self._entries) - 1)
         self._update_props()
-        self._refresh_list()
-        self._update_status()
 
     def _dup(self):
         if not (0 <= self._sel < len(self._entries)):
@@ -651,8 +660,6 @@ class UserDataDialog(gui.GeDialog):
         self._entries.insert(self._sel + 1, e)
         self._sel += 1
         self._update_props()
-        self._refresh_list()
-        self._update_status()
 
     def _move(self, direction: int):
         n = len(self._entries)
@@ -664,29 +671,15 @@ class UserDataDialog(gui.GeDialog):
         self._entries[self._sel], self._entries[ni] = \
             self._entries[ni], self._entries[self._sel]
         self._sel = ni
-        self._refresh_list()
-        self._update_status()
+        # 不用调 _update_props：数据没变只是位置变了
 
     def _clear_all(self):
         if not self._entries:
             return
-        if gui.QuestionDialog("确定要清空列表中的所有条目吗？"):
+        if gui.QuestionDialog("确定要清空所有用户数据条目吗?"):
             self._entries.clear()
             self._sel = -1
             self._update_props()
-            self._refresh_list()
-            self._update_status()
-
-    def _apply_preset(self, index: int) -> None:
-        """追加预设的 entries 到列表末尾"""
-        if 0 <= index < len(PRESETS):
-            preset = PRESETS[index]
-            for e in preset["entries"]:
-                self._entries.append(e.copy())
-            self._sel = len(self._entries) - 1
-            self._update_props()
-            self._refresh_list()
-            self._update_status()
 
     def _clear_object_data(self):
         """清空选中对象的所有用户数据"""
@@ -704,7 +697,6 @@ class UserDataDialog(gui.GeDialog):
 
         removed = 0
         doc.StartUndo()
-        doc.SetUndoName(f"清空用户数据 ({len(objs)} 个对象)")
         for obj in objs:
             if not obj:
                 continue
@@ -862,7 +854,6 @@ class UserDataDialog(gui.GeDialog):
         for obj in objs:
             if obj:
                 doc.AddUndo(c4d.UNDOTYPE_CHANGE, obj)
-        doc.SetUndoName(f"应用用户数据 ({len(self._entries)} 条 × {len(objs)} 个对象)")
 
         for obj in objs:
             if not obj:
@@ -992,7 +983,7 @@ class UserDataDialog(gui.GeDialog):
                 return
 
         entries = [Entry.from_dict(e) for e in raw]
-        self._replace_or_append(entries, "模板文件")
+        self._replace_or_append(entries, f"模板文件")
         gui.MessageDialog(f"已加载 {len(entries)} 个条目。")
 
     # ── 预设 ───────────────────────────────────────────────────────
