@@ -883,25 +883,28 @@ class UserDataDialog(gui.GeDialog):
 # ─────────────────────────────────────────────────────────────────
 
 class UserDataCommandData(c4d.plugins.CommandData):
-    """菜单命令（切换式：点一次打开，再点关闭）"""
+    """菜单命令"""
 
     def __init__(self):
         self._dlg: Optional[UserDataDialog] = None
 
     def Execute(self, doc):
-        if self._dlg is None or not self._dlg.IsOpen():
-            self._dlg = UserDataDialog()
-            return self._dlg.Open(
-                dlgtype=c4d.DLG_TYPE_ASYNC,
-                pluginid=PLUGIN_ID,
-                defaultw=640,
-                defaulth=520,
-                xpos=-1, ypos=-1,
-                subid=0)
-        else:
-            self._dlg.Close()
+        # 关闭旧的（若已被用户点 X 关闭则忽略错误）
+        if self._dlg is not None:
+            try:
+                self._dlg.Close()
+            except Exception:
+                pass
             self._dlg = None
-            return True
+        # 创建新的
+        self._dlg = UserDataDialog()
+        return self._dlg.Open(
+            dlgtype=c4d.DLG_TYPE_ASYNC,
+            pluginid=PLUGIN_ID,
+            defaultw=640,
+            defaulth=520,
+            xpos=-1, ypos=-1,
+            subid=0)
 
     def RestoreLayout(self, sec_ref):
         # 异步对话框：RestoreLayout 直接返回 True 避免二次打开崩溃
