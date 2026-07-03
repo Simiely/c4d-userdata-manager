@@ -23,7 +23,7 @@ import json
 import os
 from typing import Optional
 
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -71,10 +71,9 @@ _gRoot   = 1000
 _gTop    = 1001
 _gBody   = 1002
 _gList   = 1003
-_gProp   = 1004
-_gBot    = 1005
-
-_lstMain = 2000
+_gScroll = 1004   # scroll group for entry list
+_gProp   = 1005
+_gBot    = 1006
 
 _btnAdd    = 2101
 _btnDel    = 2102
@@ -99,6 +98,16 @@ _edtDesc    = 2209
 _edtDDItems = 2210
 
 _txtInfo = 2400
+
+# 动态生成的列表行控件 ID 基址
+# 每个条目行占用 4 个连续 ID
+_ROW_BASE   = 5000
+_ROW_STRIDE = 4
+# 行内各控件的偏移
+_R_IDX    = 0   # 序号（StaticText）
+_R_SEL    = 1   # 选择按钮（Button）
+_R_TYPE   = 2   # 类型（StaticText）
+_R_VALUE  = 3   # 默认值（StaticText）
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -409,10 +418,14 @@ class UserDataDialog(gui.GeDialog):
         self.AddButton(_btnUp,     flags=c4d.BFH_LEFT, initw=32, inith=24, name="↑")
         self.AddButton(_btnDown,   flags=c4d.BFH_LEFT, initw=32, inith=24, name="↓")
         self.AddSeparatorH(initw=8)
-        self.AddButton(_btnPreset, flags=c4d.BFH_LEFT, initw=70, inith=24, name="预设")
         self.AddButton(_btnSave,   flags=c4d.BFH_LEFT, initw=50, inith=24, name="保存")
         self.AddButton(_btnLoad,   flags=c4d.BFH_LEFT, initw=50, inith=24, name="加载")
         self.AddButton(_btnClear,  flags=c4d.BFH_LEFT, initw=50, inith=24, name="清空")
+        # 预设下拉按钮（替代 C4D 2026 中已移除的 GePopupMenu）
+        self.AddPopupButton(_btnPreset, flags=c4d.BFH_LEFT, cols=1, initw=70)
+        self.SetPopup(_btnPreset, "预设 ▼")
+        for i, p in enumerate(PRESETS):
+            self.AddChild(_btnPreset, i, p["name"])
         self.AddButton(_btnApply,  flags=c4d.BFH_RIGHT, initw=120, inith=24, name="▸ 应用到对象")
         self.GroupEnd()
 
@@ -421,16 +434,25 @@ class UserDataDialog(gui.GeDialog):
                         cols=2, rows=1, title="")
         self.GroupBorderSpace(0, 0, 0, 4)
 
-        # 左侧列表
+        # 左侧: 列表标题行 + 可滚动条目区域
         self.GroupBegin(_gList, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
-                        cols=1, rows=1, title="")
+                        cols=1, rows=2, title="")
         self.GroupBorderNoTitle(c4d.BORDER_NONE)
-        self.AddListView(_lstMain, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT, cols=4)
-        self.SetListViewColumn(_lstMain, 0, "#",   30)
-        self.SetListViewColumn(_lstMain, 1, "名称", 130)
-        self.SetListViewColumn(_lstMain, 2, "类型", 110)
-        self.SetListViewColumn(_lstMain, 3, "默认值", 100)
+        self.GroupBorderSpace(0, 0, 0, 2)
+
+        # 列表表头
+        self.GroupBegin(0, flags=c4d.BFH_SCALEFIT, cols=4, rows=1, title="")
+        self.AddStaticText(0, flags=c4d.BFH_LEFT, initw=30,  name="#", border=c4d.BORDER_THIN_IN)
+        self.AddStaticText(0, flags=c4d.BFH_SCALEFIT, initw=130, name="名称", border=c4d.BORDER_THIN_IN)
+        self.AddStaticText(0, flags=c4d.BFH_SCALEFIT, initw=110, name="类型", border=c4d.BORDER_THIN_IN)
+        self.AddStaticText(0, flags=c4d.BFH_SCALEFIT, initw=100, name="默认值", border=c4d.BORDER_THIN_IN)
         self.GroupEnd()
+
+        # 可滚动的条目列表（由 _refresh_list 动态填充）
+        self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
+                              scrollflags=c4d.SCROLLGROUP_VERT)
+        self.ScrollGroupEnd(_gScroll)
+        self.GroupEnd()  # _gList
 
         # 右侧属性面板
         self.GroupBegin(_gProp, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
@@ -531,13 +553,15 @@ class UserDataDialog(gui.GeDialog):
                     return True
             return True
 
-        # 列表选择变化
-        if mid == _lstMain:
-            sel = self.GetSelectedListViewItem(_lstMain)
-            self._sel = sel if sel >= 0 else -1
-            self._update_props()
-            self._update_status()
-            return True
+        # ── 列表行按钮点击（选择条目） ──
+        if _ROW_BASE <= mid < _ROW_BASE + 9999:
+            idx = (mid - _ROW_BASE) // _ROW_STRIDE
+            if 0 <= idx < len(self._entries):
+                self._sel = idx
+                self._update_props()
+                self._update_status()
+                self._refresh_list()
+                return True
 
         # 操作按钮
         if mid == _btnAdd:
@@ -559,7 +583,14 @@ class UserDataDialog(gui.GeDialog):
         elif mid == _btnLoad:
             self._load_template()
         elif mid == _btnPreset:
-            self._show_presets()
+            # AddPopupButton 选择触发——获取选中索引
+            idx = self.GetInt32(_btnPreset)
+            if 0 <= idx < len(PRESETS):
+                preset = PRESETS[idx]
+                entries = [e.copy() for e in preset["entries"]]
+                self._replace_or_append(entries, f"预设「{preset['name']}」")
+                self._refresh_list()
+                self._update_status()
 
         # 属性编辑
         elif mid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
@@ -585,7 +616,7 @@ class UserDataDialog(gui.GeDialog):
         if not (0 <= self._sel < len(self._entries)):
             return
         name = self._entries[self._sel].name
-        if not gui.Question(f"确定删除「{name}」?"):
+        if not gui.QuestionDialog(f"确定删除「{name}」?"):
             return
         del self._entries[self._sel]
         self._sel = min(self._sel, len(self._entries) - 1)
@@ -615,29 +646,50 @@ class UserDataDialog(gui.GeDialog):
     def _clear_all(self):
         if not self._entries:
             return
-        if gui.Question("确定要清空所有用户数据条目吗?"):
+        if gui.QuestionDialog("确定要清空所有用户数据条目吗?"):
             self._entries.clear()
             self._sel = -1
             self._update_props()
 
     # ── 列表刷新 ───────────────────────────────────────────────────
+    # C4D 2026 移除了 AddListView / FreezeListView / ThawListView 等，
+    # 使用 ScrollGroup + 按钮行模拟列表
 
     def _refresh_list(self):
-        # C4D 2026 移除了 FreezeListView/ThawListView，直接用即可
-        self.SetListViewMode(_lstMain, c4d.LV_REPORT)
-        # 清空
-        cnt = self.GetListViewCount(_lstMain)
-        for i in range(cnt - 1, -1, -1):
-            self.RemoveListViewItem(_lstMain, i)
-        # 填充
+        # 清除旧的动态控件
+        self.LayoutFlushGroup(_gScroll)
+
+        # 重新构建可滚动的条目行
+        self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
+                              scrollflags=c4d.SCROLLGROUP_VERT)
         for i, e in enumerate(self._entries):
-            self.SetListViewItem(_lstMain, i, str(i + 1), column=0)
-            self.SetListViewItem(_lstMain, i, e.name, column=1)
-            self.SetListViewItem(_lstMain, i, UDT.name(e.dtype), column=2)
-            self.SetListViewItem(_lstMain, i, e.display_value(), column=3)
-        # 恢复选中
-        if 0 <= self._sel < len(self._entries):
-            self.SetSelectedListViewItem(_lstMain, self._sel)
+            base = _ROW_BASE + i * _ROW_STRIDE
+            is_sel = (i == self._sel)
+            # 选中行用浅色背景包裹
+            bg_flags = c4d.BFH_SCALEFIT | (c4d.BFV_SCALEFIT if is_sel else 0)
+            self.GroupBegin(base + 1000, flags=bg_flags, cols=4, rows=1, title="")
+            if is_sel:
+                self.GroupBorderSpace(0, 0, 0, 0)
+            else:
+                self.GroupBorderSpace(0, 0, 0, 0)
+
+            # 序号
+            self.AddStaticText(base + _R_IDX, flags=c4d.BFH_LEFT,
+                               initw=30, name=str(i + 1))
+            # 名称按钮（点击选择该行）
+            name_text = f"▶ {e.name}" if is_sel else f"  {e.name}"
+            self.AddButton(base + _R_SEL, flags=c4d.BFH_SCALEFIT,
+                           initw=130, inith=18, name=name_text)
+            # 类型
+            self.AddStaticText(base + _R_TYPE, flags=c4d.BFH_SCALEFIT,
+                               initw=110, name=UDT.name(e.dtype))
+            # 默认值
+            self.AddStaticText(base + _R_VALUE, flags=c4d.BFH_SCALEFIT,
+                               initw=100, name=e.display_value())
+            self.GroupEnd()
+
+        self.ScrollGroupEnd(_gScroll)
+        self.LayoutChanged(_gScroll)
 
     # ── 属性面板 ───────────────────────────────────────────────────
 
@@ -784,7 +836,7 @@ class UserDataDialog(gui.GeDialog):
         if not new_entries:
             return
         if self._entries:
-            replace = gui.Question(
+            replace = gui.QuestionDialog(
                 f"{source_label} ({len(new_entries)} 个条目)\n"
                 f"当前共 {len(self._entries)} 个条目。\n\n"
                 "「是」= 替换全部  「否」= 追加到末尾"
@@ -806,10 +858,12 @@ class UserDataDialog(gui.GeDialog):
         if not self._entries:
             gui.MessageDialog("没有条目可保存。")
             return
-        fn = storage.LoadDialog(title="保存用户数据模板",
-                                flags=c4d.FILESELECT_SAVE,
-                                def_file="userdata_template.json",
-                                typeflags=c4d.FILESELECTTYPE_ANYTHING)
+        # C4D 2026: typeflags 改为 type 参数
+        fn = storage.LoadDialog(
+            title="保存用户数据模板",
+            flags=c4d.FILESELECT_SAVE,
+            type=c4d.FILESELECTTYPE_ANYTHING,
+            def_file="userdata_template.json")
         if not fn:
             return
         if not fn.endswith(".json"):
@@ -827,9 +881,11 @@ class UserDataDialog(gui.GeDialog):
             gui.MessageDialog(f"保存失败: {ex}")
 
     def _load_template(self):
-        fn = storage.LoadDialog(title="加载用户数据模板",
-                                flags=c4d.FILESELECT_LOAD,
-                                typeflags=c4d.FILESELECTTYPE_ANYTHING)
+        # C4D 2026: typeflags 改为 type 参数
+        fn = storage.LoadDialog(
+            title="加载用户数据模板",
+            flags=c4d.FILESELECT_LOAD,
+            type=c4d.FILESELECTTYPE_ANYTHING)
         if not fn:
             return
         try:
@@ -866,17 +922,7 @@ class UserDataDialog(gui.GeDialog):
         gui.MessageDialog(f"已加载 {len(entries)} 个条目。")
 
     # ── 预设 ───────────────────────────────────────────────────────
-
-    def _show_presets(self):
-        menu = gui.GePopupMenu()
-        for i, p in enumerate(PRESETS):
-            menu.AddString(i, p["name"])
-        result = menu.Open(self, x=0, y=0)
-        if result < 0 or result >= len(PRESETS):
-            return
-        preset = PRESETS[result]
-        entries = [e.copy() for e in preset["entries"]]
-        self._replace_or_append(entries, f"预设「{preset['name']}」")
+    # 使用 AddPopupButton 替代 C4D 2026 中已移除的 GePopupMenu
 
 
 # ─────────────────────────────────────────────────────────────────
