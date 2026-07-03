@@ -23,7 +23,7 @@ import json
 import os
 from typing import Optional
 
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -133,16 +133,16 @@ class UDT:
     FILENAME = 9
 
     LABELS = {
-        FLOAT:    "Float 浮点数",
-        INTEGER:  "Integer 整数",
-        BOOL:     "Boolean 布尔",
-        COLOR:    "Color 颜色",
-        VECTOR:   "Vector 向量",
-        ANGLE:    "Angle 角度 (°)",
-        PERCENT:  "Percentage 百分比",
-        STRING:   "String 字符串",
-        DROPDOWN: "Dropdown 下拉列表",
-        FILENAME: "Filename 文件路径",
+        FLOAT:    "Float",
+        INTEGER:  "Integer",
+        BOOL:     "Boolean",
+        COLOR:    "Color",
+        VECTOR:   "Vector",
+        ANGLE:    "Angle (°)",
+        PERCENT:  "Percentage",
+        STRING:   "String",
+        DROPDOWN: "Dropdown",
+        FILENAME: "Filename",
     }
 
     # 类型 → C4D 内部类型（静态，只构建一次）
@@ -371,37 +371,37 @@ class Entry:
 # ─────────────────────────────────────────────────────────────────
 
 PRESETS = [
-    {"name": "Float 浮点数",    "btn": "浮点数",    "entries": [Entry("Float",    UDT.FLOAT,   0, 100,   1, 50)]},
-    {"name": "Speed 速度",    "btn": "速度",    "entries": [Entry("Speed",    UDT.FLOAT,   0, 100,   1, 50)]},
-    {"name": "Strength 强度", "btn": "强度",  "entries": [Entry("Strength", UDT.PERCENT, 0, 200,   1, 100)]},
-    {"name": "Opacity 透明度", "btn": "透明度", "entries": [Entry("Opacity",  UDT.PERCENT, 0, 100,   1, 100)]},
-    {"name": "Scale 缩放",    "btn": "缩放",    "entries": [Entry("Scale",    UDT.PERCENT, 0, 500,   1, 100)]},
-    {"name": "Color 颜色",    "btn": "颜色",    "entries": [Entry("Color",    UDT.COLOR,   0, 1,   0.01, 1)]},
-    {"name": "Position 位置偏移", "btn": "位置偏移", "entries": [
+    {"name": "Float",       "btn": "Float",     "entries": [Entry("Float",    UDT.FLOAT,   0, 100,   1, 50)]},
+    {"name": "Speed",       "btn": "Speed",     "entries": [Entry("Speed",    UDT.FLOAT,   0, 100,   1, 50)]},
+    {"name": "Strength",    "btn": "Strength",  "entries": [Entry("Strength", UDT.PERCENT, 0, 200,   1, 100)]},
+    {"name": "Opacity",     "btn": "Opacity",   "entries": [Entry("Opacity",  UDT.PERCENT, 0, 100,   1, 100)]},
+    {"name": "Scale",       "btn": "Scale",     "entries": [Entry("Scale",    UDT.PERCENT, 0, 500,   1, 100)]},
+    {"name": "Color",       "btn": "Color",     "entries": [Entry("Color",    UDT.COLOR,   0, 1,   0.01, 1)]},
+    {"name": "Position",    "btn": "Position",  "entries": [
         Entry("Offset.X", UDT.FLOAT, -1000, 1000, 1, 0),
         Entry("Offset.Y", UDT.FLOAT, -1000, 1000, 1, 0),
         Entry("Offset.Z", UDT.FLOAT, -1000, 1000, 1, 0),
     ]},
-    {"name": "Rotation 旋转", "btn": "旋转", "entries": [
+    {"name": "Rotation",    "btn": "Rotation",  "entries": [
         Entry("Rotate.X", UDT.ANGLE, 0, 360, 1, 0),
         Entry("Rotate.Y", UDT.ANGLE, 0, 360, 1, 0),
         Entry("Rotate.Z", UDT.ANGLE, 0, 360, 1, 0),
     ]},
-    {"name": "Random Seed",  "btn": "随机",  "entries": [
+    {"name": "Random Seed", "btn": "Random",    "entries": [
         Entry("Seed",      UDT.INTEGER, 0, 99999, 1, 0),
         Entry("Randomize", UDT.BOOL,    0, 1, 1, True),
     ]},
-    {"name": "Count 计数",   "btn": "计数",   "entries": [Entry("Count", UDT.INTEGER, 1, 1000, 1, 10)]},
-    {"name": "Enable 开关",  "btn": "开关",  "entries": [Entry("Enabled", UDT.BOOL, 0, 1, 1, True)]},
-    {"name": "Falloff 衰减", "btn": "衰减", "entries": [
+    {"name": "Count",       "btn": "Count",     "entries": [Entry("Count", UDT.INTEGER, 1, 1000, 1, 10)]},
+    {"name": "Enable",      "btn": "Enable",    "entries": [Entry("Enabled", UDT.BOOL, 0, 1, 1, True)]},
+    {"name": "Falloff",     "btn": "Falloff",   "entries": [
         Entry("Radius",  UDT.FLOAT,   0, 1000, 1, 100),
         Entry("Falloff", UDT.PERCENT, 0, 100,  1, 50),
     ]},
-    {"name": "Weights 权重", "btn": "权重", "entries": [
+    {"name": "Weights",     "btn": "Weights",   "entries": [
         Entry("Weight A", UDT.FLOAT, 0, 1, 0.01, 0.5),
         Entry("Weight B", UDT.FLOAT, 0, 1, 0.01, 0.5),
     ]},
-    {"name": "Material 材质", "btn": "材质", "entries": [
+    {"name": "Material",    "btn": "Material",  "entries": [
         Entry("Metallic",  UDT.PERCENT, 0, 100, 1, 0),
         Entry("Roughness", UDT.PERCENT, 0, 100, 1, 50),
         Entry("Emission",  UDT.COLOR,   0, 1, 0.01, 0),
@@ -454,7 +454,7 @@ class UserDataDialog(gui.GeDialog):
                         cols=len(PRESETS), rows=1, title="")
         for i, p in enumerate(PRESETS):
             self.AddButton(_btnPresetBase + i, flags=c4d.BFH_LEFT,
-                           initw=75, inith=30, name=p.get("btn", p["name"]))
+                           initw=85, inith=30, name=p.get("btn", p["name"]))
         self.GroupEnd()
         self.GroupEnd()
         self.GroupEnd()
@@ -481,7 +481,7 @@ class UserDataDialog(gui.GeDialog):
         # 可滚动的条目列表（由 _refresh_list 动态填充）
         self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                               scrollflags=c4d.SCROLLGROUP_VERT)
-        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=4, rows=0, title="")
+        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT, cols=1, rows=0, title="")
         self.GroupEnd()  # _gListContent
         self.GroupEnd()  # ScrollGroupBegin
         self.GroupEnd()  # _gList
@@ -705,24 +705,30 @@ class UserDataDialog(gui.GeDialog):
         # 清除旧的列表行控件
         self.LayoutFlushGroup(_gListContent)
 
-        # 在 cols=4 的 _gListContent 中按每行 4 个控件直接添加
+        # 每行用一个独立 Group 包裹，确保高度一致、从顶部排列
         for i, e in enumerate(self._entries):
             base = _ROW_BASE + i * _ROW_STRIDE
             is_sel = (i == self._sel)
 
+            # 每行独立 Group：cols=4, rows=1 保证 4 个控件在同一行
+            self.GroupBegin(0, flags=c4d.BFH_SCALEFIT, cols=4, rows=1, title="")
+            self.GroupBorderSpace(0, 0, 0, 0)
+
             # 序号
             self.AddStaticText(base + _R_IDX, flags=c4d.BFH_LEFT,
-                               initw=30, name=str(i + 1))
+                               initw=30, inith=18, name=str(i + 1))
             # 名称按钮（点击选择该行）
             name_text = f"▶ {e.name}" if is_sel else f"  {e.name}"
             self.AddButton(base + _R_SEL, flags=c4d.BFH_SCALEFIT,
                            initw=130, inith=18, name=name_text)
             # 类型
             self.AddStaticText(base + _R_TYPE, flags=c4d.BFH_SCALEFIT,
-                               initw=110, name=UDT.name(e.dtype))
+                               initw=110, inith=18, name=UDT.name(e.dtype))
             # 默认值
             self.AddStaticText(base + _R_VALUE, flags=c4d.BFH_SCALEFIT,
-                               initw=100, name=e.display_value())
+                               initw=100, inith=18, name=e.display_value())
+
+            self.GroupEnd()
 
         self.LayoutChanged(_gScroll)
 
