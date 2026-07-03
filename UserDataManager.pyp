@@ -17,16 +17,13 @@ Author  : Your Name
 License : MIT
 """
 
-from __future__ import annotations
-
 import c4d
 from c4d import gui, storage, bitmaps
-from enum import IntEnum
 import json
 import os
+from typing import Optional
 
-
-__version__ = "2.0.1"
+__version__ = "1.3.0"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -34,25 +31,24 @@ __version__ = "2.0.1"
 # ─────────────────────────────────────────────────────────────────
 # 部分常量在 C4D 2026 Python SDK 中被移除，用 hasattr 安全回退
 
-def _c(name: str, fallback: int) -> int:
+def _c(name, fallback):
     """安全获取 c4d 常量，不存在时用默认值"""
     return getattr(c4d, name, fallback)
 
-
 # DESC_UNIT（整数值在各版本中稳定）
-_DESC_UNIT_NONE       = _c("DESC_UNIT_NONE", 0)
-_DESC_UNIT_METER      = _c("DESC_UNIT_METER", 1)
-_DESC_UNIT_CENTIMETER = _c("DESC_UNIT_CENTIMETER", 2)
-_DESC_UNIT_MILLIMETER = _c("DESC_UNIT_MILLIMETER", 3)
-_DESC_UNIT_KILOMETER  = _c("DESC_UNIT_KILOMETER", 4)
-_DESC_UNIT_DEGREE     = _c("DESC_UNIT_DEGREE", 5)
-_DESC_UNIT_PERCENT    = _c("DESC_UNIT_PERCENT", 6)
-_DESC_UNIT_SECOND     = _c("DESC_UNIT_SECOND", 7)
-_DESC_UNIT_FRAME      = _c("DESC_UNIT_FRAME", 8)
+_DESC_UNIT_NONE       = _c('DESC_UNIT_NONE', 0)
+_DESC_UNIT_METER      = _c('DESC_UNIT_METER', 1)
+_DESC_UNIT_CENTIMETER = _c('DESC_UNIT_CENTIMETER', 2)
+_DESC_UNIT_MILLIMETER = _c('DESC_UNIT_MILLIMETER', 3)
+_DESC_UNIT_KILOMETER  = _c('DESC_UNIT_KILOMETER', 4)
+_DESC_UNIT_DEGREE     = _c('DESC_UNIT_DEGREE', 5)
+_DESC_UNIT_PERCENT    = _c('DESC_UNIT_PERCENT', 6)
+_DESC_UNIT_SECOND     = _c('DESC_UNIT_SECOND', 7)
+_DESC_UNIT_FRAME      = _c('DESC_UNIT_FRAME', 8)
 
 # DESC_CYCLE（各版本稳定）
-_DESC_CYCLE       = _c("DESC_CYCLE", 2000)
-_DESC_CYCLE_COUNT = _c("DESC_CYCLE_COUNT", 20000)
+_DESC_CYCLE       = _c('DESC_CYCLE', 2000)
+_DESC_CYCLE_COUNT = _c('DESC_CYCLE_COUNT', 20000)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -86,7 +82,7 @@ _btnApply  = 2106
 _btnSave   = 2107
 _btnLoad   = 2108
 _btnClear  = 2110
-_btnClearObjData = 2111   # 清空对象的用户数据
+_btnClearObjData = 2111  # 清空对象的用户数据
 # 预设按钮基址（每个预设一个按钮）
 _btnPresetBase = 2120
 
@@ -110,18 +106,18 @@ _gListContent = 2501
 _ROW_BASE   = 5000
 _ROW_STRIDE = 4
 # 行内各控件的偏移
-_R_IDX   = 0   # 序号（StaticText）
-_R_SEL   = 1   # 选择按钮（Button）
-_R_TYPE  = 2   # 类型（StaticText）
-_R_VALUE = 3   # 默认值（StaticText）
+_R_IDX    = 0   # 序号（StaticText）
+_R_SEL    = 1   # 选择按钮（Button）
+_R_TYPE   = 2   # 类型（StaticText）
+_R_VALUE  = 3   # 默认值（StaticText）
 
 
 # ─────────────────────────────────────────────────────────────────
 # 数据类型
 # ─────────────────────────────────────────────────────────────────
 
-class UDT(IntEnum):
-    """用户数据类型枚举（IntEnum 可保证成员值即是 int，可直接用于 C4D API 比较和索引）"""
+class UDT:
+    """用户数据类型枚举"""
     FLOAT    = 0
     INTEGER  = 1
     BOOL     = 2
@@ -133,7 +129,6 @@ class UDT(IntEnum):
     DROPDOWN = 8
     FILENAME = 9
 
-    # 类型 → UI 显示标签
     LABELS = {
         FLOAT:    "Float 浮点数",
         INTEGER:  "Integer 整数",
@@ -147,7 +142,7 @@ class UDT(IntEnum):
         FILENAME: "Filename 文件路径",
     }
 
-    # 类型 → C4D 内部数据类型
+    # 类型 → C4D 内部类型（静态，只构建一次）
     _DTYPE_MAP = {
         FLOAT:    c4d.DTYPE_REAL,
         INTEGER:  c4d.DTYPE_LONG,
@@ -160,41 +155,37 @@ class UDT(IntEnum):
         DROPDOWN: c4d.DTYPE_LONG,
         FILENAME: c4d.DTYPE_FILENAME,
     }
-
-    # 类型 → 默认 C4D 单位
     _UNIT_MAP = {
         ANGLE:   _DESC_UNIT_DEGREE,
         PERCENT: _DESC_UNIT_PERCENT,
     }
-
-    # 有范围（min/max）的类型集合
     _RANGE_TYPES = {FLOAT, INTEGER, PERCENT, ANGLE, VECTOR}
-    # 数值型（可用于数值编辑控件）
     _NUMERIC_TYPES = {FLOAT, INTEGER, PERCENT, ANGLE, VECTOR, COLOR}
+    _ALL_TYPES = [FLOAT, INTEGER, BOOL, COLOR, VECTOR,
+                  ANGLE, PERCENT, STRING, DROPDOWN, FILENAME]
 
     @classmethod
-    def name(cls, t: int) -> str:
-        """返回类型的显示标签"""
+    def all_types(cls):
+        return cls._ALL_TYPES
+
+    @classmethod
+    def name(cls, t):
         return cls.LABELS.get(t, "未知")
 
     @classmethod
-    def c4d_dtype(cls, t: int) -> int:
-        """返回 C4D 内部数据类型常量"""
+    def c4d_dtype(cls, t):
         return cls._DTYPE_MAP.get(t, c4d.DTYPE_REAL)
 
     @classmethod
-    def c4d_unit(cls, t: int) -> int:
-        """返回类型的默认 C4D 单位，无单位则返回 _DESC_UNIT_NONE"""
+    def c4d_unit(cls, t):
         return cls._UNIT_MAP.get(t, _DESC_UNIT_NONE)
 
     @classmethod
-    def has_range(cls, t: int) -> bool:
-        """该类型是否支持 min/max 范围"""
+    def has_range(cls, t):
         return t in cls._RANGE_TYPES
 
     @classmethod
-    def is_numeric(cls, t: int) -> bool:
-        """该类型是否是数值类型"""
+    def is_numeric(cls, t):
         return t in cls._NUMERIC_TYPES
 
 
@@ -212,8 +203,7 @@ class Entry:
     def __init__(self, name: str = "参数", dtype: int = UDT.FLOAT,
                  min_v: float = 0.0, max_v: float = 100.0, step: float = 1.0,
                  default_v: float = 50.0, unit: int = _DESC_UNIT_NONE,
-                 group: str = "", desc: str = "",
-                 dd_items: str = "Item 1\nItem 2\nItem 3") -> None:
+                 group: str = "", desc: str = "", dd_items: str = "Item 1\nItem 2\nItem 3"):
         self.name = name
         self.dtype = dtype
         self.min_v = min_v
@@ -225,15 +215,13 @@ class Entry:
         self.desc = desc
         self.dd_items = dd_items
 
-    # ── BaseContainer 构建 ─────────────────────────────────────
-
     def build_bc(self) -> c4d.BaseContainer:
         """构建 C4D 用户数据定义 BaseContainer"""
         bc = c4d.GetCustomDataTypeDefault(UDT.c4d_dtype(self.dtype))
         bc[c4d.DESC_NAME] = self.name
 
         if self.dtype in (UDT.FLOAT, UDT.PERCENT, UDT.ANGLE):
-            # WHY: C4D 内部百分比以 0-1 存储（1.0 = 100%），UI 层仍按 0-100 显示
+            # C4D 内部百分比以 0-1 存储，UI 层仍按 0-100 显示
             scale: float = 100.0 if self.dtype == UDT.PERCENT else 1.0
             bc[c4d.DESC_MIN]     = float(self.min_v) / scale
             bc[c4d.DESC_MAX]     = float(self.max_v) / scale
@@ -265,46 +253,37 @@ class Entry:
             bc[c4d.DESC_DEFAULT] = int(float(self.default_v or 0))
             self._build_dropdown(bc)
 
-        # 单位：仅当存在有效单位时才写入
-        # WHY: DESC_UNIT=0 和未设置 DESC_UNIT 在 C4D 中是两回事。
-        # 对 FLOAT 等无单位类型，写入 0 会破坏参数渲染。
+        # 单位：仅当存在有效单位时才写入，避免 DESC_UNIT=0 导致 FLOAT 等类型异常
         u = UDT.c4d_unit(self.dtype)
         if u != _DESC_UNIT_NONE:
             bc[c4d.DESC_UNIT] = u
         elif self.unit != _DESC_UNIT_NONE:
             bc[c4d.DESC_UNIT] = self.unit
 
-        # 分组短名（用于 Attribute > User Data 面板中的分组标题）
+        # 分组短名
         if self.group.strip():
             bc[c4d.DESC_SHORT_NAME] = self.group.strip()
 
         return bc
 
     def get_c4d_value(self):
-        """返回可直接写入对象参数值的 Python 对象
-
-        WHY: AddUserData() 只创建描述定义，不保证从 DESC_DEFAULT 初始化参数值。
-        必须在 AddUserData 后显式写入一次。
-
-        注意 PERCENT 类型需要 0-100 → 0-1 转换。
-        """
+        """返回可直接写入对象参数值的 Python 对象（处理百分比 0-100 → 0-1 等转换）"""
         if self.dtype == UDT.BOOL:
             return int(bool(self.default_v))
-        if self.dtype == UDT.COLOR:
+        elif self.dtype == UDT.COLOR:
             return self._parse_color(self.default_v)
-        if self.dtype == UDT.VECTOR:
+        elif self.dtype == UDT.VECTOR:
             return c4d.Vector(self.default_v, self.default_v, self.default_v)
-        if self.dtype in (UDT.INTEGER, UDT.DROPDOWN):
+        elif self.dtype == UDT.INTEGER or self.dtype == UDT.DROPDOWN:
             return int(float(self.default_v or 0))
-        if self.dtype == UDT.PERCENT:
+        elif self.dtype == UDT.PERCENT:
             return float(self.default_v) / 100.0
-        if self.dtype in (UDT.STRING, UDT.FILENAME):
+        elif self.dtype in (UDT.STRING, UDT.FILENAME):
             return str(self.default_v or "")
-        # FLOAT, ANGLE
-        return float(self.default_v)
+        else:  # FLOAT, ANGLE
+            return float(self.default_v)
 
     def _parse_color(self, val) -> c4d.Vector:
-        """将多种格式的颜色值解析为 c4d.Vector"""
         if isinstance(val, (int, float)):
             return c4d.Vector(float(val), float(val), float(val))
         try:
@@ -318,14 +297,13 @@ class Entry:
             pass
         return c4d.Vector(1, 1, 1)
 
-    def _build_dropdown(self, bc: c4d.BaseContainer) -> None:
-        """在下拉类型的 BaseContainer 中添加选项列表"""
+    def _build_dropdown(self, bc):
         items = [s.strip() for s in self.dd_items.split("\n") if s.strip()]
         for i, item in enumerate(items):
             bc.SetString(_DESC_CYCLE + i, item)
         bc[_DESC_CYCLE_COUNT] = len(items)
 
-    # ── 序列化 ─────────────────────────────────────────────────
+    # ── 序列化 ─────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
         return {
@@ -342,7 +320,7 @@ class Entry:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> Entry:
+    def from_dict(cls, d: dict):
         return cls(
             name=d.get("name", "参数"),
             dtype=d.get("type", UDT.FLOAT),
@@ -356,26 +334,25 @@ class Entry:
             dd_items=d.get("dd_items", "Item 1\nItem 2\nItem 3"),
         )
 
-    def copy(self) -> Entry:
+    def copy(self):
         return Entry(self.name, self.dtype, self.min_v, self.max_v,
                      self.step, self.default_v, self.unit,
                      self.group, self.desc, self.dd_items)
 
     def display_value(self) -> str:
-        """返回该条目默认值的可读字符串"""
         if self.dtype == UDT.COLOR:
             try:
                 v = self._parse_color(self.default_v)
                 return f"{v.x:.2f}, {v.y:.2f}, {v.z:.2f}"
             except Exception:
                 return str(self.default_v)
-        if self.dtype == UDT.BOOL:
+        elif self.dtype == UDT.BOOL:
             return "是" if self.default_v else "否"
-        if self.dtype == UDT.PERCENT:
+        elif self.dtype == UDT.PERCENT:
             return f"{self.default_v}%"
-        if self.dtype == UDT.ANGLE:
+        elif self.dtype == UDT.ANGLE:
             return f"{self.default_v}°"
-        if self.dtype == UDT.DROPDOWN:
+        elif self.dtype == UDT.DROPDOWN:
             items = [s.strip() for s in self.dd_items.split("\n") if s.strip()]
             idx = int(float(self.default_v or 0))
             if 0 <= idx < len(items):
@@ -434,7 +411,7 @@ PRESETS = [
 class UserDataDialog(gui.GeDialog):
     """主对话框"""
 
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
         self._entries: list[Entry] = []
         self._sel: int = -1
@@ -448,16 +425,7 @@ class UserDataDialog(gui.GeDialog):
                         cols=1, rows=4, title="")
         self.GroupBorderSpace(6, 6, 6, 6)
 
-        self._build_toolbar()
-        self._build_presets()
-        self._build_body()
-        self._build_statusbar()
-
-        self.GroupEnd()  # _gRoot
-        return True
-
-    def _build_toolbar(self) -> None:
-        """构建第一排工具栏"""
+        # ─── 工具栏 ───
         self.GroupBegin(_gTop, flags=c4d.BFH_SCALEFIT, cols=11, rows=1, title="")
         self.GroupBorderSpace(0, 0, 0, 4)
         self.AddButton(_btnAdd,    flags=c4d.BFH_LEFT, initw=32, inith=24, name="＋")
@@ -473,8 +441,7 @@ class UserDataDialog(gui.GeDialog):
         self.AddButton(_btnApply,  flags=c4d.BFH_RIGHT, initw=120, inith=24, name="▸ 应用到对象")
         self.GroupEnd()
 
-    def _build_presets(self) -> None:
-        """构建第二排预设按钮行（水平滚动）"""
+        # ─── 预设按钮行（水平滚动） ───
         self.GroupBegin(_gPreset, flags=c4d.BFH_SCALEFIT, cols=1, rows=1, title="")
         self.GroupBorderSpace(0, 0, 0, 4)
         self.ScrollGroupBegin(0, flags=c4d.BFH_SCALEFIT,
@@ -488,22 +455,12 @@ class UserDataDialog(gui.GeDialog):
         self.GroupEnd()
         self.GroupEnd()
 
-    def _build_body(self) -> None:
-        """构建主体区域：左侧列表 + 右侧属性面板"""
+        # ─── 主体: 列表 + 属性 ───
         self.GroupBegin(_gBody, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                         cols=2, rows=1, title="")
         self.GroupBorderSpace(0, 0, 0, 4)
 
-        # ── 左侧：列表 ──
-        self._build_list_area()
-
-        # ── 右侧：属性面板 ──
-        self._build_prop_panel()
-
-        self.GroupEnd()  # _gBody
-
-    def _build_list_area(self) -> None:
-        """构建左侧列表区域：表头 + 可滚动条目"""
+        # 左侧: 列表标题行 + 可滚动条目区域
         self.GroupBegin(_gList, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                         cols=1, rows=2, title="")
         self.GroupBorderNoTitle(c4d.BORDER_NONE)
@@ -520,14 +477,12 @@ class UserDataDialog(gui.GeDialog):
         # 可滚动的条目列表（由 _refresh_list 动态填充）
         self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                               scrollflags=c4d.SCROLLGROUP_VERT)
-        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
-                        cols=1, rows=0, title="")
+        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT, cols=1, rows=0, title="")
         self.GroupEnd()  # _gListContent
         self.GroupEnd()  # ScrollGroupBegin
         self.GroupEnd()  # _gList
 
-    def _build_prop_panel(self) -> None:
-        """构建右侧属性编辑面板（2 列 × 13 行）"""
+        # 右侧属性面板
         self.GroupBegin(_gProp, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                         cols=2, rows=13, title="属性",
                         groupflags=c4d.BORDER_GROUP_TOP | c4d.BORDER_WITH_TITLE)
@@ -540,7 +495,7 @@ class UserDataDialog(gui.GeDialog):
         # 类型
         self.AddStaticText(0, flags=c4d.BFH_LEFT, name="类型:")
         self.AddComboBox(_cmbType, c4d.BFH_SCALEFIT, 1)
-        for dt in UDT:
+        for dt in UDT.all_types():
             self.AddChild(_cmbType, dt, UDT.name(dt))
 
         # 分组
@@ -590,28 +545,24 @@ class UserDataDialog(gui.GeDialog):
                          initw=140, inith=50)
 
         self.GroupEnd()  # _gProp
+        self.GroupEnd()  # _gBody
 
-    def _build_statusbar(self) -> None:
-        """构建底部状态栏"""
+        # ─── 底部状态 ───
         self.GroupBegin(_gBot, flags=c4d.BFH_SCALEFIT, cols=1, rows=1, title="")
         self.GroupBorderSpace(0, 4, 0, 0)
         self.AddStaticText(_txtInfo, flags=c4d.BFH_SCALEFIT, name="就绪")
         self.GroupEnd()
 
-    # ── 初始化 ─────────────────────────────────────────────────────
-
-    def InitValues(self) -> bool:
-        self._on_data_changed()
+        self.GroupEnd()  # _gRoot
         return True
 
-    # ── 数据变更统一刷新 ──────────────────────────────────────────
+    # ── 初始化 ─────────────────────────────────────────────────────
 
-    def _on_data_changed(self, update_props: bool = True) -> None:
-        """数据变更后统一刷新 UI（消除重复调用）"""
+    def InitValues(self):
         self._refresh_list()
+        self._update_props()
         self._update_status()
-        if update_props:
-            self._update_props()
+        return True
 
     # ── 消息处理 ───────────────────────────────────────────────────
 
@@ -632,7 +583,9 @@ class UserDataDialog(gui.GeDialog):
             idx = (mid - _ROW_BASE) // _ROW_STRIDE
             if 0 <= idx < len(self._entries):
                 self._sel = idx
-                self._on_data_changed()
+                self._update_props()
+                self._update_status()
+                self._refresh_list()
             return True
 
         # ── 操作按钮 ──
@@ -664,18 +617,21 @@ class UserDataDialog(gui.GeDialog):
             self._update_entry_from_ui()
             if mid == _cmbType:
                 self._update_props()
-            self._on_data_changed(update_props=False)
+            self._refresh_list()
+            self._update_status()
 
         return True
 
     # ── 增删改 ─────────────────────────────────────────────────────
 
-    def _add(self) -> None:
+    def _add(self):
         self._entries.append(Entry())
         self._sel = len(self._entries) - 1
-        self._on_data_changed()
+        self._update_props()
+        self._refresh_list()
+        self._update_status()
 
-    def _del(self) -> None:
+    def _del(self):
         if not (0 <= self._sel < len(self._entries)):
             return
         name = self._entries[self._sel].name
@@ -683,18 +639,22 @@ class UserDataDialog(gui.GeDialog):
             return
         del self._entries[self._sel]
         self._sel = min(self._sel, len(self._entries) - 1)
-        self._on_data_changed()
+        self._update_props()
+        self._refresh_list()
+        self._update_status()
 
-    def _dup(self) -> None:
+    def _dup(self):
         if not (0 <= self._sel < len(self._entries)):
             return
         e = self._entries[self._sel].copy()
         e.name += "_copy"
         self._entries.insert(self._sel + 1, e)
         self._sel += 1
-        self._on_data_changed()
+        self._update_props()
+        self._refresh_list()
+        self._update_status()
 
-    def _move(self, direction: int) -> None:
+    def _move(self, direction: int):
         n = len(self._entries)
         if n < 2 or not (0 <= self._sel < n):
             return
@@ -704,16 +664,18 @@ class UserDataDialog(gui.GeDialog):
         self._entries[self._sel], self._entries[ni] = \
             self._entries[ni], self._entries[self._sel]
         self._sel = ni
-        # 移动不改变属性面板内容，跳过 _update_props
-        self._on_data_changed(update_props=False)
+        self._refresh_list()
+        self._update_status()
 
-    def _clear_all(self) -> None:
+    def _clear_all(self):
         if not self._entries:
             return
         if gui.QuestionDialog("确定要清空列表中的所有条目吗？"):
             self._entries.clear()
             self._sel = -1
-            self._on_data_changed()
+            self._update_props()
+            self._refresh_list()
+            self._update_status()
 
     def _apply_preset(self, index: int) -> None:
         """追加预设的 entries 到列表末尾"""
@@ -722,9 +684,11 @@ class UserDataDialog(gui.GeDialog):
             for e in preset["entries"]:
                 self._entries.append(e.copy())
             self._sel = len(self._entries) - 1
-            self._on_data_changed()
+            self._update_props()
+            self._refresh_list()
+            self._update_status()
 
-    def _clear_object_data(self) -> None:
+    def _clear_object_data(self):
         """清空选中对象的所有用户数据"""
         doc = c4d.documents.GetActiveDocument()
         if not doc:
@@ -745,17 +709,15 @@ class UserDataDialog(gui.GeDialog):
             if not obj:
                 continue
             doc.AddUndo(c4d.UNDOTYPE_CHANGE, obj)
-            # WHY: GetUserDataContainer 在 C4D 2026 中迭代产生 (key, value) 元组，
-            # 旧版本直接返回整数 key。用 isinstance 兼容两种行为。
+            # GetUserDataContainer 返回的容器在 C4D 2026 中迭代产生 (key, value) 元组
             udc = obj.GetUserDataContainer()
             if udc:
                 dids = []
                 for item in udc:
                     if isinstance(item, tuple):
-                        dids.append(item[0])   # C4D 2026: (key, value)
+                        dids.append(item[0])
                     else:
-                        dids.append(item)      # C4D 2025 及更早: key
-                # WHY: 倒序删除，避免正序删除时索引偏移导致的跳项
+                        dids.append(item)
                 for did in reversed(dids):
                     if obj.RemoveUserData(did):
                         removed += 1
@@ -768,15 +730,11 @@ class UserDataDialog(gui.GeDialog):
     # C4D 2026 移除了 AddListView / FreezeListView / ThawListView 等，
     # 使用 ScrollGroup + 按钮行模拟列表
 
-    def _refresh_list(self) -> None:
-        """动态刷新条目列表
-
-        每行用一个独立 Group 包裹，确保高度一致、从顶部排列。
-        WHY: 使用 cols=4 直接平铺控件时，Button 和 StaticText 高度不同，
-        会导致布局混乱。每行独立 Group + 统一 inith=18 可解决此问题。
-        """
+    def _refresh_list(self):
+        # 清除旧的列表行控件
         self.LayoutFlushGroup(_gListContent)
 
+        # 每行用一个独立 Group 包裹，确保高度一致、从顶部排列
         for i, e in enumerate(self._entries):
             base = _ROW_BASE + i * _ROW_STRIDE
             is_sel = (i == self._sel)
@@ -805,15 +763,15 @@ class UserDataDialog(gui.GeDialog):
 
     # ── 属性面板 ───────────────────────────────────────────────────
 
-    def _get_entry(self):
-        """返回当前选中的条目，无选中时返回 None"""
+    def _get_entry(self) -> Optional[Entry]:
         if 0 <= self._sel < len(self._entries):
             return self._entries[self._sel]
         return None
 
-    def _update_props(self) -> None:
+    def _update_props(self):
         """属性面板 ← 当前选中条目"""
         e = self._get_entry()
+        enabled = e is not None
 
         self.SetString(_edtName, e.name if e else "")
         if e:
@@ -835,61 +793,53 @@ class UserDataDialog(gui.GeDialog):
             self.SetReal(_edtDefault, 0.0)
             self.SetInt32(_cmbUnit, _DESC_UNIT_NONE)
 
-        self._sync_props_enabled(e)
-
-    def _sync_props_enabled(self, e) -> None:
-        """根据当前选中条目类型，同步启用/禁用属性面板的各控件"""
-        enabled = e is not None
-
+        # 启用/禁用
         for cid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
                     _edtMin, _edtMax, _edtStep, _edtDefault,
                     _cmbType, _cmbUnit):
             self.Enable(cid, enabled)
 
-        if not e:
-            return
+        if e:
+            hr = UDT.has_range(e.dtype)
+            self.Enable(_edtMin, hr)
+            self.Enable(_edtMax, hr)
+            self.Enable(_edtStep, e.dtype in (UDT.FLOAT, UDT.PERCENT,
+                                               UDT.ANGLE, UDT.VECTOR))
+            # 下拉选项
+            is_dd = e.dtype == UDT.DROPDOWN
+            self.Enable(_edtDDItems, is_dd)
+            # 非数值类型禁用范围
+            if not UDT.is_numeric(e.dtype) and e.dtype != UDT.DROPDOWN:
+                self.Enable(_edtMin, False)
+                self.Enable(_edtMax, False)
+                self.Enable(_edtStep, False)
 
-        hr = UDT.has_range(e.dtype)
-        self.Enable(_edtMin, hr)
-        self.Enable(_edtMax, hr)
-        self.Enable(_edtStep, e.dtype in (UDT.FLOAT, UDT.PERCENT,
-                                           UDT.ANGLE, UDT.VECTOR))
-
-        # 下拉选项仅对 Dropdown 类型可见
-        self.Enable(_edtDDItems, e.dtype == UDT.DROPDOWN)
-
-        # 非数值类型（且非 Dropdown）禁用所有范围控件
-        if not UDT.is_numeric(e.dtype) and e.dtype != UDT.DROPDOWN:
-            self.Enable(_edtMin, False)
-            self.Enable(_edtMax, False)
-            self.Enable(_edtStep, False)
-
-    def _update_entry_from_ui(self) -> None:
+    def _update_entry_from_ui(self):
         """当前条目 ← 属性面板"""
         e = self._get_entry()
         if not e:
             return
-        e.name      = self.GetString(_edtName)
-        e.dtype     = self.GetInt32(_cmbType)
-        e.group     = self.GetString(_edtGroup)
-        e.desc      = self.GetString(_edtDesc)
-        e.dd_items  = self.GetString(_edtDDItems)
-        e.min_v     = self.GetReal(_edtMin)
-        e.max_v     = self.GetReal(_edtMax)
-        e.step      = self.GetReal(_edtStep)
+        e.name    = self.GetString(_edtName)
+        e.dtype   = self.GetInt32(_cmbType)
+        e.group   = self.GetString(_edtGroup)
+        e.desc    = self.GetString(_edtDesc)
+        e.dd_items = self.GetString(_edtDDItems)
+        e.min_v   = self.GetReal(_edtMin)
+        e.max_v   = self.GetReal(_edtMax)
+        e.step    = self.GetReal(_edtStep)
         e.default_v = self.GetReal(_edtDefault)
-        e.unit      = self.GetInt32(_cmbUnit)
+        e.unit    = self.GetInt32(_cmbUnit)
 
     # ── 状态 ───────────────────────────────────────────────────────
 
-    def _update_status(self) -> None:
+    def _update_status(self):
         cnt = len(self._entries)
         sel_info = f" | 选中: #{self._sel + 1}" if 0 <= self._sel < cnt else ""
         self.SetString(_txtInfo, f"条目数: {cnt}{sel_info}")
 
     # ── 应用到对象 ─────────────────────────────────────────────────
 
-    def _apply_to_objects(self) -> None:
+    def _apply_to_objects(self):
         if not self._entries:
             gui.MessageDialog("请先添加用户数据条目。")
             return
@@ -904,12 +854,11 @@ class UserDataDialog(gui.GeDialog):
             return
 
         added = 0
-        errors: list[str] = []
+        errors = []
         total = len(objs) * len(self._entries)
 
         doc.StartUndo()
-        # WHY: 先统一对每个对象标记 Undo（而非每条数据 × 每个对象），
-        # 避免 undo 记录数量爆炸为 N×M。
+        # 先标记所有对象，undo 时一步恢复
         for obj in objs:
             if obj:
                 doc.AddUndo(c4d.UNDOTYPE_CHANGE, obj)
@@ -923,8 +872,8 @@ class UserDataDialog(gui.GeDialog):
                     bc = entry.build_bc()
                     did = obj.AddUserData(bc)
                     if did is not None:
-                        # WHY: AddUserData 不总能从 DESC_DEFAULT 正确初始化值，
-                        # 显式写入一次以确保默认值生效（见 DEVELOPMENT.md #19）
+                        # AddUserData 不总能从 DESC_DEFAULT 正确初始化值，
+                        # 显式写入一次以确保默认值生效
                         obj[did] = entry.get_c4d_value()
                         added += 1
                     else:
@@ -945,7 +894,7 @@ class UserDataDialog(gui.GeDialog):
             # 最多显示前 5 条错误
             detail = "\n".join(errors[:5])
             if len(errors) > 5:
-                detail += f"\n...及其他 {len(errors) - 5} 条错误"
+                detail += f"\n...及其他 {len(errors)-5} 条错误"
             gui.MessageDialog(
                 f"{summary}\n"
                 f"失败: {len(errors)} 个\n\n"
@@ -958,7 +907,6 @@ class UserDataDialog(gui.GeDialog):
 
     def _replace_or_append(self, new_entries: list[Entry],
                            source_label: str) -> None:
-        """替换或追加条目列表"""
         if not new_entries:
             return
         if self._entries:
@@ -974,11 +922,13 @@ class UserDataDialog(gui.GeDialog):
         else:
             self._entries = new_entries
         self._sel = 0 if self._entries else -1
-        self._on_data_changed()
+        self._refresh_list()
+        self._update_props()
+        self._update_status()
 
     # ── 模板 ───────────────────────────────────────────────────────
 
-    def _save_template(self) -> None:
+    def _save_template(self):
         if not self._entries:
             gui.MessageDialog("没有条目可保存。")
             return
@@ -1004,7 +954,7 @@ class UserDataDialog(gui.GeDialog):
         except Exception as ex:
             gui.MessageDialog(f"保存失败: {ex}")
 
-    def _load_template(self) -> None:
+    def _load_template(self):
         # C4D 2026: typeflags 改为 type 参数
         fn = storage.LoadDialog(
             title="加载用户数据模板",
@@ -1029,21 +979,24 @@ class UserDataDialog(gui.GeDialog):
             return
         for i, item in enumerate(raw):
             if not isinstance(item, dict):
-                gui.MessageDialog(f"模板格式错误：第 {i + 1} 项不是合法条目。")
+                gui.MessageDialog(f"模板格式错误：第 {i+1} 项不是合法条目。")
                 return
             if "name" not in item or "type" not in item:
                 gui.MessageDialog(
-                    f"模板格式错误：第 {i + 1} 项缺少 name 或 type 字段。")
+                    f"模板格式错误：第 {i+1} 项缺少 name 或 type 字段。")
                 return
             if not isinstance(item.get("type"), int) or \
-               item["type"] not in UDT._value2member_map_:
+               item["type"] not in UDT._ALL_TYPES:
                 gui.MessageDialog(
-                    f"模板格式错误：第 {i + 1} 项 type 值无效 ({item.get('type')})。")
+                    f"模板格式错误：第 {i+1} 项 type 值无效 ({item.get('type')})。")
                 return
 
         entries = [Entry.from_dict(e) for e in raw]
         self._replace_or_append(entries, "模板文件")
         gui.MessageDialog(f"已加载 {len(entries)} 个条目。")
+
+    # ── 预设 ───────────────────────────────────────────────────────
+    # 使用第二排按钮（水平滚动）替代原来的 AddPopupButton 下拉菜单
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1053,9 +1006,8 @@ class UserDataDialog(gui.GeDialog):
 class UserDataCommandData(c4d.plugins.CommandData):
     """菜单命令"""
 
-    def __init__(self) -> None:
-        # WHY: 用实例变量保持对话框引用，防止 Python GC 回收导致窗口空白
-        self._dlg: UserDataDialog | None = None
+    def __init__(self):
+        self._dlg: Optional[UserDataDialog] = None
 
     def Execute(self, doc):
         # 关闭旧的（若已被用户点 X 关闭则忽略错误）
@@ -1076,8 +1028,7 @@ class UserDataCommandData(c4d.plugins.CommandData):
             subid=0)
 
     def RestoreLayout(self, sec_ref):
-        # WHY: 异步对话框直接返回 True，避免二次打开时 C4D 调用
-        # RestoreLayout 崩溃（Py_HashPointer + PyIter_Send）
+        # 异步对话框：RestoreLayout 直接返回 True 避免二次打开崩溃
         return True
 
     def GetID(self):
@@ -1086,6 +1037,7 @@ class UserDataCommandData(c4d.plugins.CommandData):
 
 def _load_icon():
     """加载插件图标，失败时返回 None"""
+    # 按优先级尝试不同尺寸
     for name in ("icon.png", "icon_32.png", "icon_64.png"):
         path = os.path.join(PLUGIN_DIR, name)
         if os.path.isfile(path):
@@ -1099,9 +1051,9 @@ def main():
     """C4D 插件入口"""
     icon = _load_icon()
     if icon:
-        print("[UserDataManager] 图标加载成功")
+        print(f"[UserDataManager] 图标加载成功")
     else:
-        print("[UserDataManager] 未找到图标文件，使用默认图标")
+        print(f"[UserDataManager] 未找到图标文件，使用默认图标")
     return c4d.plugins.RegisterCommandPlugin(
         id=PLUGIN_ID,
         str=PLUGIN_NAME,
