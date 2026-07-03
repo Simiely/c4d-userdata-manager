@@ -98,6 +98,7 @@ _cmbUnit    = 2207
 _edtGroup   = 2208
 _edtDesc    = 2209
 _edtDDItems = 2210
+_cmbCustomGUI = 2211
 
 _txtInfo = 2400
 # 动态列表内容组（嵌套在 ScrollGroup 内部，用于 LayoutFlushGroup 刷新）
@@ -209,13 +210,15 @@ class Entry:
     """一条用户数据条目"""
     __slots__ = (
         "name", "dtype", "min_v", "max_v", "step",
-        "default_v", "unit", "group", "desc", "dd_items"
+        "default_v", "unit", "group", "desc", "dd_items",
+        "customgui",
     )
 
     def __init__(self, name="Param", dtype=UDT.FLOAT,
                  min_v=0.0, max_v=100.0, step=1.0,
                  default_v=50.0, unit=_DESC_UNIT_NONE,
-                 group="", desc="", dd_items="Item 1\nItem 2\nItem 3"):
+                 group="", desc="", dd_items="Item 1\nItem 2\nItem 3",
+                 customgui=0):
         self.name = name
         self.dtype = dtype
         self.min_v = min_v
@@ -226,6 +229,7 @@ class Entry:
         self.group = group
         self.desc = desc
         self.dd_items = dd_items
+        self.customgui = customgui
 
     def build_bc(self) -> c4d.BaseContainer:
         """构建 C4D 用户数据定义 BaseContainer"""
@@ -251,7 +255,7 @@ class Entry:
             bc[c4d.DESC_DEFAULT] = c4d.Vector(self.default_v, self.default_v, self.default_v)
 
         elif self.dtype == UDT.BOOL:
-            bc[c4d.DESC_DEFAULT] = bool(self.default_v)
+            bc[c4d.DESC_DEFAULT] = int(bool(self.default_v))
 
         elif self.dtype == UDT.COLOR:
             bc[c4d.DESC_DEFAULT] = self._parse_color(self.default_v)
@@ -271,10 +275,13 @@ class Entry:
         if self.group.strip():
             bc[c4d.DESC_SHORT_NAME] = self.group.strip()
 
-        # 自定义 GUI
-        g = UDT.c4d_gui(self.dtype)
-        if g:
-            bc[c4d.DESC_CUSTOMGUI] = g
+        # 自定义 GUI（优先使用用户选择的值，否则根据类型自动选择）
+        if self.customgui:
+            bc[c4d.DESC_CUSTOMGUI] = self.customgui
+        else:
+            g = UDT.c4d_gui(self.dtype)
+            if g:
+                bc[c4d.DESC_CUSTOMGUI] = g
 
         return bc
 
@@ -312,6 +319,7 @@ class Entry:
             "group": self.group,
             "desc": self.desc,
             "dd_items": self.dd_items,
+            "customgui": self.customgui,
         }
 
     @classmethod
@@ -327,12 +335,14 @@ class Entry:
             group=d.get("group", ""),
             desc=d.get("desc", ""),
             dd_items=d.get("dd_items", "Item 1\nItem 2\nItem 3"),
+            customgui=d.get("customgui", 0),
         )
 
     def copy(self):
         return Entry(self.name, self.dtype, self.min_v, self.max_v,
                      self.step, self.default_v, self.unit,
-                     self.group, self.desc, self.dd_items)
+                     self.group, self.desc, self.dd_items,
+                     customgui=self.customgui)
 
     def display_value(self) -> str:
         if self.dtype == UDT.COLOR:
@@ -361,36 +371,37 @@ class Entry:
 # ─────────────────────────────────────────────────────────────────
 
 PRESETS = [
-    {"name": "Speed 速度",    "btn": "Speed\n速度",    "entries": [Entry("Speed",    UDT.FLOAT,   0, 100,   1, 50)]},
-    {"name": "Strength 强度", "btn": "Strength\n强度",  "entries": [Entry("Strength", UDT.PERCENT, 0, 200,   1, 100)]},
-    {"name": "Opacity 透明度", "btn": "Opacity\n透明度", "entries": [Entry("Opacity",  UDT.PERCENT, 0, 100,   1, 100)]},
-    {"name": "Scale 缩放",    "btn": "Scale\n缩放",    "entries": [Entry("Scale",    UDT.PERCENT, 0, 500,   1, 100)]},
-    {"name": "Color 颜色",    "btn": "Color\n颜色",    "entries": [Entry("Color",    UDT.COLOR,   0, 1,   0.01, 1)]},
-    {"name": "Position 位置偏移", "btn": "Position\n位置偏移", "entries": [
+    {"name": "Float 浮点数",    "btn": "浮点数",    "entries": [Entry("Float",    UDT.FLOAT,   0, 100,   1, 50)]},
+    {"name": "Speed 速度",    "btn": "速度",    "entries": [Entry("Speed",    UDT.FLOAT,   0, 100,   1, 50)]},
+    {"name": "Strength 强度", "btn": "强度",  "entries": [Entry("Strength", UDT.PERCENT, 0, 200,   1, 100)]},
+    {"name": "Opacity 透明度", "btn": "透明度", "entries": [Entry("Opacity",  UDT.PERCENT, 0, 100,   1, 100)]},
+    {"name": "Scale 缩放",    "btn": "缩放",    "entries": [Entry("Scale",    UDT.PERCENT, 0, 500,   1, 100)]},
+    {"name": "Color 颜色",    "btn": "颜色",    "entries": [Entry("Color",    UDT.COLOR,   0, 1,   0.01, 1)]},
+    {"name": "Position 位置偏移", "btn": "位置偏移", "entries": [
         Entry("Offset.X", UDT.FLOAT, -1000, 1000, 1, 0),
         Entry("Offset.Y", UDT.FLOAT, -1000, 1000, 1, 0),
         Entry("Offset.Z", UDT.FLOAT, -1000, 1000, 1, 0),
     ]},
-    {"name": "Rotation 旋转", "btn": "Rotation\n旋转", "entries": [
+    {"name": "Rotation 旋转", "btn": "旋转", "entries": [
         Entry("Rotate.X", UDT.ANGLE, 0, 360, 1, 0),
         Entry("Rotate.Y", UDT.ANGLE, 0, 360, 1, 0),
         Entry("Rotate.Z", UDT.ANGLE, 0, 360, 1, 0),
     ]},
-    {"name": "Random Seed",  "btn": "Random Seed",  "entries": [
+    {"name": "Random Seed",  "btn": "随机",  "entries": [
         Entry("Seed",      UDT.INTEGER, 0, 99999, 1, 0),
         Entry("Randomize", UDT.BOOL,    0, 1, 1, True),
     ]},
-    {"name": "Count 计数",   "btn": "Count\n计数",   "entries": [Entry("Count", UDT.INTEGER, 1, 1000, 1, 10)]},
-    {"name": "Enable 开关",  "btn": "Enable\n开关",  "entries": [Entry("Enabled", UDT.BOOL, 0, 1, 1, True)]},
-    {"name": "Falloff 衰减", "btn": "Falloff\n衰减", "entries": [
+    {"name": "Count 计数",   "btn": "计数",   "entries": [Entry("Count", UDT.INTEGER, 1, 1000, 1, 10)]},
+    {"name": "Enable 开关",  "btn": "开关",  "entries": [Entry("Enabled", UDT.BOOL, 0, 1, 1, True)]},
+    {"name": "Falloff 衰减", "btn": "衰减", "entries": [
         Entry("Radius",  UDT.FLOAT,   0, 1000, 1, 100),
         Entry("Falloff", UDT.PERCENT, 0, 100,  1, 50),
     ]},
-    {"name": "Weights 权重", "btn": "Weights\n权重", "entries": [
+    {"name": "Weights 权重", "btn": "权重", "entries": [
         Entry("Weight A", UDT.FLOAT, 0, 1, 0.01, 0.5),
         Entry("Weight B", UDT.FLOAT, 0, 1, 0.01, 0.5),
     ]},
-    {"name": "Material 材质", "btn": "Material\n材质", "entries": [
+    {"name": "Material 材质", "btn": "材质", "entries": [
         Entry("Metallic",  UDT.PERCENT, 0, 100, 1, 0),
         Entry("Roughness", UDT.PERCENT, 0, 100, 1, 50),
         Entry("Emission",  UDT.COLOR,   0, 1, 0.01, 0),
@@ -470,14 +481,14 @@ class UserDataDialog(gui.GeDialog):
         # 可滚动的条目列表（由 _refresh_list 动态填充）
         self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                               scrollflags=c4d.SCROLLGROUP_VERT)
-        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=1, rows=0, title="")
+        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=4, rows=0, title="")
         self.GroupEnd()  # _gListContent
         self.GroupEnd()  # ScrollGroupBegin
         self.GroupEnd()  # _gList
 
         # 右侧属性面板
         self.GroupBegin(_gProp, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
-                        cols=2, rows=13, title="属性",
+                        cols=2, rows=14, title="属性",
                         groupflags=c4d.BORDER_GROUP_TOP | c4d.BORDER_WITH_TITLE)
         self.GroupBorderSpace(4, 2, 4, 4)
 
@@ -527,6 +538,20 @@ class UserDataDialog(gui.GeDialog):
         ]
         for uid, ulabel in _units:
             self.AddChild(_cmbUnit, uid, ulabel)
+
+        # 自定义GUI
+        self.AddStaticText(0, flags=c4d.BFH_LEFT, name="自定义GUI:")
+        self.AddComboBox(_cmbCustomGUI, c4d.BFH_SCALEFIT, 1)
+        _gui_opts = [(0, "自动")]
+        for _gname, _glabel in [
+            ("CUSTOMGUI_REALSLIDER",  "浮点滑块"),
+            ("CUSTOMGUI_COLORFIELD",  "颜色选择器"),
+            ("CUSTOMGUI_CYCLECUSTOM", "循环下拉"),
+        ]:
+            if hasattr(c4d, _gname):
+                _gui_opts.append((getattr(c4d, _gname), _glabel))
+        for gid, glabel in _gui_opts:
+            self.AddChild(_cmbCustomGUI, gid, glabel)
 
         # 说明
         self.AddStaticText(0, flags=c4d.BFH_LEFT, name="说明:")
@@ -616,7 +641,7 @@ class UserDataDialog(gui.GeDialog):
         # 属性编辑
         elif mid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
                      _edtMin, _edtMax, _edtStep, _edtDefault,
-                     _cmbType, _cmbUnit):
+                     _cmbType, _cmbUnit, _cmbCustomGUI):
             self._update_entry_from_ui()
             # 切换类型时立即刷新属性面板
             if mid == _cmbType:
@@ -680,17 +705,10 @@ class UserDataDialog(gui.GeDialog):
         # 清除旧的列表行控件
         self.LayoutFlushGroup(_gListContent)
 
-        # 重新构建条目行（LayoutFlushGroup 后插入点已在 _gListContent 内）
+        # 在 cols=4 的 _gListContent 中按每行 4 个控件直接添加
         for i, e in enumerate(self._entries):
             base = _ROW_BASE + i * _ROW_STRIDE
             is_sel = (i == self._sel)
-            # 选中行用浅色背景包裹
-            bg_flags = c4d.BFH_SCALEFIT | (c4d.BFV_SCALEFIT if is_sel else 0)
-            self.GroupBegin(base + 1000, flags=bg_flags, cols=4, rows=1, title="")
-            if is_sel:
-                self.GroupBorderSpace(0, 0, 0, 0)
-            else:
-                self.GroupBorderSpace(0, 0, 0, 0)
 
             # 序号
             self.AddStaticText(base + _R_IDX, flags=c4d.BFH_LEFT,
@@ -705,7 +723,6 @@ class UserDataDialog(gui.GeDialog):
             # 默认值
             self.AddStaticText(base + _R_VALUE, flags=c4d.BFH_SCALEFIT,
                                initw=100, name=e.display_value())
-            self.GroupEnd()
 
         self.LayoutChanged(_gScroll)
 
@@ -734,17 +751,19 @@ class UserDataDialog(gui.GeDialog):
             self.SetReal(_edtStep, e.step)
             self.SetReal(_edtDefault, e.default_v)
             self.SetInt32(_cmbUnit, e.unit)
+            self.SetInt32(_cmbCustomGUI, e.customgui)
         else:
             self.SetReal(_edtMin, 0.0)
             self.SetReal(_edtMax, 100.0)
             self.SetReal(_edtStep, 1.0)
             self.SetReal(_edtDefault, 0.0)
             self.SetInt32(_cmbUnit, _DESC_UNIT_NONE)
+            self.SetInt32(_cmbCustomGUI, 0)
 
         # 启用/禁用
         for cid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
                     _edtMin, _edtMax, _edtStep, _edtDefault,
-                    _cmbType, _cmbUnit):
+                    _cmbType, _cmbUnit, _cmbCustomGUI):
             self.Enable(cid, enabled)
 
         if e:
@@ -777,6 +796,7 @@ class UserDataDialog(gui.GeDialog):
         e.step    = self.GetReal(_edtStep)
         e.default_v = self.GetReal(_edtDefault)
         e.unit    = self.GetInt32(_cmbUnit)
+        e.customgui = self.GetInt32(_cmbCustomGUI)
 
     # ── 状态 ───────────────────────────────────────────────────────
 
