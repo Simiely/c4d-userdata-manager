@@ -46,9 +46,6 @@ _DESC_UNIT_PERCENT    = _c('DESC_UNIT_PERCENT', 6)
 _DESC_UNIT_SECOND     = _c('DESC_UNIT_SECOND', 7)
 _DESC_UNIT_FRAME      = _c('DESC_UNIT_FRAME', 8)
 
-# CUSTOMGUI
-_CUSTOMGUI_REALSLIDER = _c('CUSTOMGUI_REALSLIDER', 0)
-
 # DESC_CYCLE（各版本稳定）
 _DESC_CYCLE       = _c('DESC_CYCLE', 2000)
 _DESC_CYCLE_COUNT = _c('DESC_CYCLE_COUNT', 20000)
@@ -98,7 +95,6 @@ _cmbUnit    = 2207
 _edtGroup   = 2208
 _edtDesc    = 2209
 _edtDDItems = 2210
-_cmbCustomGUI = 2211
 
 _txtInfo = 2400
 # 动态列表内容组（嵌套在 ScrollGroup 内部，用于 LayoutFlushGroup 刷新）
@@ -162,12 +158,6 @@ class UDT:
         ANGLE:   _DESC_UNIT_DEGREE,
         PERCENT: _DESC_UNIT_PERCENT,
     }
-    # 自定义 GUI（动态检测，某些常量在老版本可能不存在）
-    _GUI_MAP = {}
-    for _const_name, _dt in [("CUSTOMGUI_COLORFIELD", COLOR),
-                              ("CUSTOMGUI_CYCLECUSTOM", DROPDOWN)]:
-        if hasattr(c4d, _const_name):
-            _GUI_MAP[_dt] = getattr(c4d, _const_name)
     _RANGE_TYPES = {FLOAT, INTEGER, PERCENT, ANGLE, VECTOR}
     _NUMERIC_TYPES = {FLOAT, INTEGER, PERCENT, ANGLE, VECTOR, COLOR}
     _ALL_TYPES = [FLOAT, INTEGER, BOOL, COLOR, VECTOR,
@@ -190,10 +180,6 @@ class UDT:
         return cls._UNIT_MAP.get(t, _DESC_UNIT_NONE)
 
     @classmethod
-    def c4d_gui(cls, t):
-        return cls._GUI_MAP.get(t, _CUSTOMGUI_REALSLIDER)
-
-    @classmethod
     def has_range(cls, t):
         return t in cls._RANGE_TYPES
 
@@ -211,14 +197,12 @@ class Entry:
     __slots__ = (
         "name", "dtype", "min_v", "max_v", "step",
         "default_v", "unit", "group", "desc", "dd_items",
-        "customgui",
     )
 
     def __init__(self, name="Param", dtype=UDT.FLOAT,
                  min_v=0.0, max_v=100.0, step=1.0,
                  default_v=50.0, unit=_DESC_UNIT_NONE,
-                 group="", desc="", dd_items="Item 1\nItem 2\nItem 3",
-                 customgui=0):
+                 group="", desc="", dd_items="Item 1\nItem 2\nItem 3"):
         self.name = name
         self.dtype = dtype
         self.min_v = min_v
@@ -229,7 +213,6 @@ class Entry:
         self.group = group
         self.desc = desc
         self.dd_items = dd_items
-        self.customgui = customgui
 
     def build_bc(self) -> c4d.BaseContainer:
         """构建 C4D 用户数据定义 BaseContainer"""
@@ -275,14 +258,6 @@ class Entry:
         if self.group.strip():
             bc[c4d.DESC_SHORT_NAME] = self.group.strip()
 
-        # 自定义 GUI（优先使用用户选择的值，否则根据类型自动选择）
-        if self.customgui:
-            bc[c4d.DESC_CUSTOMGUI] = self.customgui
-        else:
-            g = UDT.c4d_gui(self.dtype)
-            if g:
-                bc[c4d.DESC_CUSTOMGUI] = g
-
         return bc
 
     def _parse_color(self, val) -> c4d.Vector:
@@ -319,7 +294,6 @@ class Entry:
             "group": self.group,
             "desc": self.desc,
             "dd_items": self.dd_items,
-            "customgui": self.customgui,
         }
 
     @classmethod
@@ -335,14 +309,12 @@ class Entry:
             group=d.get("group", ""),
             desc=d.get("desc", ""),
             dd_items=d.get("dd_items", "Item 1\nItem 2\nItem 3"),
-            customgui=d.get("customgui", 0),
         )
 
     def copy(self):
         return Entry(self.name, self.dtype, self.min_v, self.max_v,
                      self.step, self.default_v, self.unit,
-                     self.group, self.desc, self.dd_items,
-                     customgui=self.customgui)
+                     self.group, self.desc, self.dd_items)
 
     def display_value(self) -> str:
         if self.dtype == UDT.COLOR:
@@ -488,7 +460,7 @@ class UserDataDialog(gui.GeDialog):
 
         # 右侧属性面板
         self.GroupBegin(_gProp, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
-                        cols=2, rows=14, title="属性",
+                        cols=2, rows=13, title="属性",
                         groupflags=c4d.BORDER_GROUP_TOP | c4d.BORDER_WITH_TITLE)
         self.GroupBorderSpace(4, 2, 4, 4)
 
@@ -538,20 +510,6 @@ class UserDataDialog(gui.GeDialog):
         ]
         for uid, ulabel in _units:
             self.AddChild(_cmbUnit, uid, ulabel)
-
-        # 自定义GUI
-        self.AddStaticText(0, flags=c4d.BFH_LEFT, name="自定义GUI:")
-        self.AddComboBox(_cmbCustomGUI, c4d.BFH_SCALEFIT, 1)
-        _gui_opts = [(0, "自动")]
-        for _gname, _glabel in [
-            ("CUSTOMGUI_REALSLIDER",  "浮点滑块"),
-            ("CUSTOMGUI_COLORFIELD",  "颜色选择器"),
-            ("CUSTOMGUI_CYCLECUSTOM", "循环下拉"),
-        ]:
-            if hasattr(c4d, _gname):
-                _gui_opts.append((getattr(c4d, _gname), _glabel))
-        for gid, glabel in _gui_opts:
-            self.AddChild(_cmbCustomGUI, gid, glabel)
 
         # 说明
         self.AddStaticText(0, flags=c4d.BFH_LEFT, name="说明:")
@@ -641,7 +599,7 @@ class UserDataDialog(gui.GeDialog):
         # 属性编辑
         elif mid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
                      _edtMin, _edtMax, _edtStep, _edtDefault,
-                     _cmbType, _cmbUnit, _cmbCustomGUI):
+                     _cmbType, _cmbUnit):
             self._update_entry_from_ui()
             # 切换类型时立即刷新属性面板
             if mid == _cmbType:
@@ -757,19 +715,17 @@ class UserDataDialog(gui.GeDialog):
             self.SetReal(_edtStep, e.step)
             self.SetReal(_edtDefault, e.default_v)
             self.SetInt32(_cmbUnit, e.unit)
-            self.SetInt32(_cmbCustomGUI, e.customgui)
         else:
             self.SetReal(_edtMin, 0.0)
             self.SetReal(_edtMax, 100.0)
             self.SetReal(_edtStep, 1.0)
             self.SetReal(_edtDefault, 0.0)
             self.SetInt32(_cmbUnit, _DESC_UNIT_NONE)
-            self.SetInt32(_cmbCustomGUI, 0)
 
         # 启用/禁用
         for cid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
                     _edtMin, _edtMax, _edtStep, _edtDefault,
-                    _cmbType, _cmbUnit, _cmbCustomGUI):
+                    _cmbType, _cmbUnit):
             self.Enable(cid, enabled)
 
         if e:
@@ -802,7 +758,6 @@ class UserDataDialog(gui.GeDialog):
         e.step    = self.GetReal(_edtStep)
         e.default_v = self.GetReal(_edtDefault)
         e.unit    = self.GetInt32(_cmbUnit)
-        e.customgui = self.GetInt32(_cmbCustomGUI)
 
     # ── 状态 ───────────────────────────────────────────────────────
 
