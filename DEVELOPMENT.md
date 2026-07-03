@@ -26,30 +26,37 @@
 | `SetSelectedListViewItem(id, row)` | 设置选中行 |
 | `FreezeListView(id)` / `ThawListView(id)` | 冻结/解冻刷新 |
 
-**解决方案：** 用 `ScrollGroup` + 逐行动态按钮模拟多列列表：
+**解决方案：** 用 `ScrollGroup` + 动态控件模拟多列列表：
 
 ```python
 # 在 CreateLayout 中创建骨架
-self.ScrollGroupBegin(_gScroll, flags=..., scrollflags=c4d.SCROLLGROUP_VERT)
-self.GroupBegin(_gListContent, flags=..., cols=1, rows=1, title="")
-self.GroupEnd()  # _gListContent（由 _refresh_list 动态填充）
-self.GroupEnd()  # ScrollGroup
-```
+self.GroupBegin(_gList, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
+                cols=1, rows=2, title="")
+# 表头行
+self.GroupBegin(0, flags=c4d.BFH_SCALEFIT, cols=4, rows=1, title="")
+self.AddStaticText(0, c4d.BFH_LEFT, 30,  0, "#",     c4d.BORDER_THIN_IN)
+self.AddStaticText(0, c4d.BFH_SCALEFIT, 130, 0, "名称", c4d.BORDER_THIN_IN)
+self.AddStaticText(0, c4d.BFH_SCALEFIT, 110, 0, "类型", c4d.BORDER_THIN_IN)
+self.AddStaticText(0, c4d.BFH_SCALEFIT, 100, 0, "默认值",c4d.BORDER_THIN_IN)
+self.GroupEnd()
+# 可滚动内容区 — cols=4, rows=0 使条目在 4 列网格中自然流动
+self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
+                      scrollflags=c4d.SCROLLGROUP_VERT)
+self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=4, rows=0, title="")
+self.GroupEnd()
+self.GroupEnd()
+self.GroupEnd()
 
-```python
 # 在 _refresh_list 中动态填充
 def _refresh_list(self):
     self.LayoutFlushGroup(_gListContent)
-    self.GroupBegin(_gListContent, ..., cols=1, rows=len(self._entries) or 1)
-    for i, entry in enumerate(self._entries):
+    for i, e in enumerate(self._entries):
         base = _ROW_BASE + i * _ROW_STRIDE
-        self.GroupBegin(base + 1000, ..., cols=4, rows=1)
-        self.AddStaticText(base,     ..., name=str(i+1))      # 序号
-        self.AddButton(base + 1,     ..., name=entry.name)    # 名称（可点击选中）
-        self.AddStaticText(base + 2, ..., name=UDT.name(...)) # 类型
-        self.AddStaticText(base + 3, ..., name=...)            # 默认值
-        self.GroupEnd()
-    self.GroupEnd()  # _gListContent
+        # 直接在 cols=4 的 _gListContent 中按行添加 4 个控件
+        self.AddStaticText(...)  # 序号
+        self.AddButton(...)      # 名称（可点击选中）
+        self.AddStaticText(...)  # 类型
+        self.AddStaticText(...)  # 默认值
     self.LayoutChanged(_gScroll)
 ```
 
@@ -64,9 +71,9 @@ def Command(self, mid, bc):
 
 **关键要点：**
 - `LayoutFlushGroup` 只清空子控件，不删除组本身
-- 刷新时机：`LayoutFlushGroup` → 重建 → `LayoutChanged(父group)`
-- 必须嵌套一个中间 Group（`_gListContent`），不要直接 Flush ScrollGroup
-- 行控件 ID 用基准值 + 偏移量计算，确保不冲突
+- **不要**在 `_refresh_list` 中对已存在的组再次调用 `GroupBegin(id, ...)`，因为布局参数（cols/rows/flags）在首次创建时固定，重复调用不会更新
+- 刷新时机：`LayoutFlushGroup` → 直接添加控件 → `LayoutChanged(父group)`
+- 内容容器的 `cols` 应根据实际列数设置（如 4 列），`rows=0` 表示动态行数
 
 ---
 
@@ -92,28 +99,38 @@ self.GroupEnd()
 
 **现象：** `AttributeError: module 'c4d.gui' has no attribute 'GePopupMenu'`
 
-**解决方案：** 改用 `AddPopupButton`，它创建一个始终带下拉箭头的按钮，通过 `AddChild` 添加选项。
+**解决方案：** 若只需要少数预设，建议直接改用**第二排独立按钮**（不需要弹窗交互），比 `AddPopupButton` 更直观：
 
 ```python
-# ❌ C4D 2025
-menu = gui.GePopupMenu()
+# ✅ 推荐：预设按钮行（水平滚动）
+self.ScrollGroupBegin(0, flags=c4d.BFH_SCALEFIT,
+                      scrollflags=c4d.SCROLLGROUP_HORIZ)
+self.GroupBegin(0, flags=c4d.BFH_SCALEFIT, cols=len(PRESETS), rows=1, title="")
 for i, p in enumerate(PRESETS):
-    menu.AddString(i, p["name"])
-result = menu.Open(self, x=0, y=0)
+    self.AddButton(_btnPresetBase + i, flags=c4d.BFH_LEFT,
+                   initw=65, inith=24, name=p["btn"])
+self.GroupEnd()
+self.GroupEnd()
 
-# ✅ C4D 2026
+# Command 中通过 ID 范围判断
+elif _btnPresetBase <= mid < _btnPresetBase + len(PRESETS):
+    idx = mid - _btnPresetBase
+    preset = PRESETS[idx]
+```
+
+如果仍需要弹窗，改用 `AddPopupButton`：
+
+```python
+# 替代方案：AddPopupButton
 self.AddPopupButton(_btnPreset, flags=c4d.BFH_LEFT, initw=70)
-self.SetPopup(_btnPreset, "预设 ▼")
+self.SetString(_btnPreset, "预设 ▼")
 for i, p in enumerate(PRESETS):
     self.AddChild(_btnPreset, i, p["name"])
 
-# 在 Command 中获取选择
-def Command(self, mid, bc):
-    if mid == _btnPreset:
-        idx = self.GetInt32(_btnPreset)
+# Command 中获取选中
+if mid == _btnPreset:
+    idx = self.GetInt32(_btnPreset)
 ```
-
-**注意：** `AddPopupButton` 不接受 `cols` 参数（`'cols' is an invalid keyword argument`）。
 
 ---
 
@@ -198,7 +215,61 @@ _DESC_UNIT_METER = _c('DESC_UNIT_METER', 1)
 
 ---
 
-### 8. 对话框第二次打开崩溃
+### 8. AddStaticText / AddComboBox 参数变为仅位置参数
+
+**现象：**
+```
+TypeError: 'border' is an invalid keyword argument for this function
+TypeError: 'cols' is an invalid keyword argument for this function
+```
+
+**根因：** C4D 2026 Python SDK 将部分 GeDialog 方法的某些参数改为 **positional-only**（仅位置参数），不再接受关键字传参。
+
+**已确认受影响的方法和参数：**
+
+| 方法 | 受影响参数 | 原本写法 | 修正写法 |
+|------|-----------|---------|---------|
+| `AddStaticText` | `border` | `AddStaticText(id, ..., border=c4d.BORDER_THIN_IN)` | `AddStaticText(id, ..., c4d.BORDER_THIN_IN)`（第6个位置参数） |
+| `AddComboBox` | `cols` | `AddComboBox(id, flags=..., cols=1)` | `AddComboBox(id, c4d.BFH_SCALEFIT, 1)`（第3个位置参数） |
+
+**后续排查方法：** 其他参数如 `flags=`, `name=`, `initw=`, `inith=`, `title=`, `rows=`, `groupflags=`, `scrollflags=` 等**未受影响**。只有方法签名末位的、不太常用的参数可能被改成 positional-only。如果在 C4D 2026 遇到新的 `'xxx' is an invalid keyword argument` 错误，把该参数改为位置传参即可。
+
+---
+
+### 9. build_bc() 数据写入类型不匹配
+
+**现象：** 应用用户数据到对象后，默认值显示为 0 或无法修改。
+
+**根因：** `build_bc()` 中设置 `DESC_DEFAULT`/`DESC_MIN`/`DESC_MAX`/`DESC_STEP` 时，数据类型与 C4D 期望的不一致：
+
+```python
+# ❌ 错误 — 对 DTYPE_LONG 也用了 float
+if self.dtype in (UDT.FLOAT, UDT.INTEGER, UDT.PERCENT, UDT.ANGLE):
+    bc[c4d.DESC_DEFAULT] = float(self.default_v)
+
+# ✅ 正确 — 按 C4D 数据类型分开处理
+if self.dtype in (UDT.FLOAT, UDT.PERCENT, UDT.ANGLE):
+    bc[c4d.DESC_DEFAULT] = float(self.default_v)  # DTYPE_REAL → float
+elif self.dtype == UDT.INTEGER:
+    bc[c4d.DESC_DEFAULT] = int(self.default_v)    # DTYPE_LONG → int
+```
+
+**类型对照表：**
+
+| Python 类型 | C4D 数据类型 | DESC_DEFAULT 类型 |
+|------------|-------------|------------------|
+| FLOAT / PERCENT / ANGLE | `DTYPE_REAL` | `float` |
+| INTEGER | `DTYPE_LONG` | `int` |
+| BOOL | `DTYPE_BOOL` | `int(bool(...))` |
+| COLOR / VECTOR | `DTYPE_VECTOR` | `c4d.Vector(...)` |
+| STRING / FILENAME | `DTYPE_STRING` | `str` |
+| DROPDOWN | `DTYPE_LONG` | `int(...)` |
+
+**BOOL 特别注意：** `bool(50.0)` 在 Python 中是 `True`，但 C4D 的 `BaseContainer` 需要整数 0 或 1。应使用 `int(bool(self.default_v))`。
+
+---
+
+### 10. 对话框第二次打开崩溃
 
 **现象：** 第一次打开正常，关闭后再次打开 → C4D 崩溃。
 
@@ -227,7 +298,7 @@ def RestoreLayout(self, sec_ref):
 
 ---
 
-### 9. 对话框显示空白
+### 11. 对话框显示空白
 
 **现象：** 异步对话框打开后完全空白，没有任何控件。
 
@@ -247,7 +318,7 @@ class UserDataCommandData(c4d.plugins.CommandData):
 
 ---
 
-### 10. ListView 正向循环删除跳项
+### 12. ListView 正向循环删除跳项
 
 **现象（代码审查发现）：** 原 ListView 的清除循环存在 bug。
 
@@ -264,7 +335,7 @@ for i in range(cnt - 1, -1, -1):
 
 ---
 
-### 11. Undo 记录爆炸
+### 13. Undo 记录爆炸
 
 **现象：** 批量添加用户数据时，每一条 x 每一个对象都调用一次 `AddUndo`，undo 记录数量是 N×M。
 
@@ -282,7 +353,7 @@ doc.EndUndo()
 
 ---
 
-### 12. 异常堆栈被静默吞掉
+### 14. 异常堆栈被静默吞掉
 
 **现象：** 插件报错但用户看不到任何提示（`print()` 输出到默认隐藏的控制台）。
 
@@ -298,6 +369,35 @@ except Exception as ex:
 if errors:
     detail = "\n".join(errors[:5])
     gui.MessageDialog(f"失败: {len(errors)} 个\n\n{detail}")
+```
+
+---
+
+### 15. ScrollGroup 内内容垂直居中
+
+**现象：** ScrollGroup 中动态添加的列表条目垂直居中显示，不在顶部排列。
+
+**根因：** 在 `_refresh_list` 中对已存在的 `_gListContent` 组重复调用 `GroupBegin(id, cols=1, rows=N)`，但 `GroupBegin` 不会更新已存在组的布局参数。内容容器的 `rows` 仍为初始值（如 `rows=1`），导致所有子控件被塞入 1×1 网格中居中排列。
+
+**解决方案：**
+1. `CreateLayout` 中将内容容器设为 `cols=4, rows=0`（4 列 + 动态行数）
+2. `_refresh_list` 中直接添加控件，不调用 `GroupBegin(容器id, ...)`
+
+```python
+# CreateLayout — 初始设置
+self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=4, rows=0, title="")
+self.GroupEnd()
+
+# _refresh_list — 直接添加，不用再次 GroupBegin
+def _refresh_list(self):
+    self.LayoutFlushGroup(_gListContent)
+    for i, e in enumerate(self._entries):
+        self.AddStaticText(...)   # 序号（占第 1 列）
+        self.AddButton(...)       # 名称（占第 2 列）
+        self.AddStaticText(...)   # 类型（占第 3 列）
+        self.AddStaticText(...)   # 默认值（占第 4 列）
+        # cols=4, rows=0 自动换行，每 4 个控件一行
+    self.LayoutChanged(_gScroll)
 ```
 
 ---
@@ -327,12 +427,21 @@ MenuAddString, MenuAddCommand, MenuAddSeparator, MenuFinished,
 MenuFlushAll, MenuInitString, MenuSubBegin, MenuSubEnd,
 ```
 
+### 已知受影响的参数（keyword → positional-only）
+
+| 方法 | 参数 | 建议写法 |
+|------|------|---------|
+| `AddStaticText` | `border` | 第 6 个位置参数 |
+| `AddComboBox` | `cols` | 第 3 个位置参数 |
+
 ## 开发建议
 
 1. **先查 SDK 文档再写代码。** C4D 每次大版本都可能移除/重命名 API，2023→2026 之间的破坏性变更尤其多。
-2. **动态控件用 LayoutFlushGroup + 内容组。** 不要重建 Group/ScrollGroup 本身，只刷新内部内容。
+2. **动态控件用 LayoutFlushGroup + 内容组。** 不要重建 Group/ScrollGroup 本身，只刷新内部内容。**也不要在 `_refresh_list` 中对已存在组重复 GroupBegin**——布局参数不会更新。
 3. **控件 ID 用基准值 + 偏移。** 动态生成的控件需要一个 ID 范围，`_ROW_BASE + index * stride + offset` 是最常见的模式。
 4. **常量全部用 `_c()` 包裹。** 不确定是否存在的常量一律用 `getattr` 回退，避免运行时崩溃。
 5. **异步对话框必须保持引用。** 用实例变量存对话框对象，防止被 Python GC 回收。
 6. **外部输入必须校验。** JSON 模板加载时需要做类型检查，任何用户提供的文件都不可信。
 7. **关键错误要弹对话框。** `print()` 在 C4D 插件中等同于不存在，用户看不见。
+8. **build_bc() 的 DESC_DEFAULT 类型必须与 C4D 数据类型匹配。** DTYPE_LONG → int, DTYPE_REAL → float, DTYPE_BOOL → int(bool(...))，混用会导致默认值写入失败。
+9. **GeDialog 参数如果报 `'xxx' is an invalid keyword argument`，改为位置传参。** C4D 2026 中将部分边缘参数改为了 positional-only。
