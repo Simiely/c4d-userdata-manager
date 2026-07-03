@@ -27,6 +27,34 @@ __version__ = "1.1.0"
 
 
 # ─────────────────────────────────────────────────────────────────
+# C4D 跨版本兼容
+# ─────────────────────────────────────────────────────────────────
+# 部分常量在 C4D 2026 Python SDK 中被移除，用 hasattr 安全回退
+
+def _c(name, fallback):
+    """安全获取 c4d 常量，不存在时用默认值"""
+    return getattr(c4d, name, fallback)
+
+# DESC_UNIT（整数值在各版本中稳定）
+_DESC_UNIT_NONE       = _c('DESC_UNIT_NONE', 0)
+_DESC_UNIT_METER      = _c('DESC_UNIT_METER', 1)
+_DESC_UNIT_CENTIMETER = _c('DESC_UNIT_CENTIMETER', 2)
+_DESC_UNIT_MILLIMETER = _c('DESC_UNIT_MILLIMETER', 3)
+_DESC_UNIT_KILOMETER  = _c('DESC_UNIT_KILOMETER', 4)
+_DESC_UNIT_DEGREE     = _c('DESC_UNIT_DEGREE', 5)
+_DESC_UNIT_PERCENT    = _c('DESC_UNIT_PERCENT', 6)
+_DESC_UNIT_SECOND     = _c('DESC_UNIT_SECOND', 7)
+_DESC_UNIT_FRAME      = _c('DESC_UNIT_FRAME', 8)
+
+# CUSTOMGUI
+_CUSTOMGUI_REALSLIDER = _c('CUSTOMGUI_REALSLIDER', 0)
+
+# DESC_CYCLE（各版本稳定）
+_DESC_CYCLE       = _c('DESC_CYCLE', 2000)
+_DESC_CYCLE_COUNT = _c('DESC_CYCLE_COUNT', 20000)
+
+
+# ─────────────────────────────────────────────────────────────────
 # 配置
 # ─────────────────────────────────────────────────────────────────
 
@@ -117,8 +145,8 @@ class UDT:
         FILENAME: c4d.DTYPE_FILENAME,
     }
     _UNIT_MAP = {
-        ANGLE:   c4d.DESC_UNIT_DEGREE,
-        PERCENT: c4d.DESC_UNIT_PERCENT,
+        ANGLE:   _DESC_UNIT_DEGREE,
+        PERCENT: _DESC_UNIT_PERCENT,
     }
     # 自定义 GUI（动态检测，某些常量在老版本可能不存在）
     _GUI_MAP = {}
@@ -145,11 +173,11 @@ class UDT:
 
     @classmethod
     def c4d_unit(cls, t):
-        return cls._UNIT_MAP.get(t, c4d.DESC_UNIT_NONE)
+        return cls._UNIT_MAP.get(t, _DESC_UNIT_NONE)
 
     @classmethod
     def c4d_gui(cls, t):
-        return cls._GUI_MAP.get(t, c4d.CUSTOMGUI_REALSLIDER)
+        return cls._GUI_MAP.get(t, _CUSTOMGUI_REALSLIDER)
 
     @classmethod
     def has_range(cls, t):
@@ -173,7 +201,7 @@ class Entry:
 
     def __init__(self, name="Param", dtype=UDT.FLOAT,
                  min_v=0.0, max_v=100.0, step=1.0,
-                 default_v=50.0, unit=c4d.DESC_UNIT_NONE,
+                 default_v=50.0, unit=_DESC_UNIT_NONE,
                  group="", desc="", dd_items="Item 1\nItem 2\nItem 3"):
         self.name = name
         self.dtype = dtype
@@ -218,7 +246,7 @@ class Entry:
 
         # 单位
         u = UDT.c4d_unit(self.dtype)
-        bc[c4d.DESC_UNIT] = u if u != c4d.DESC_UNIT_NONE else self.unit
+        bc[c4d.DESC_UNIT] = u if u != _DESC_UNIT_NONE else self.unit
 
         # 分组短名
         if self.group.strip():
@@ -248,8 +276,8 @@ class Entry:
     def _build_dropdown(self, bc):
         items = [s.strip() for s in self.dd_items.split("\n") if s.strip()]
         for i, item in enumerate(items):
-            bc.SetString(c4d.DESC_CYCLE + i, item)
-        bc[c4d.DESC_CYCLE_COUNT] = len(items)
+            bc.SetString(_DESC_CYCLE + i, item)
+        bc[_DESC_CYCLE_COUNT] = len(items)
 
     # ── 序列化 ─────────────────────────────────────────────────────
 
@@ -276,7 +304,7 @@ class Entry:
             max_v=d.get("max", 100.0),
             step=d.get("step", 1.0),
             default_v=d.get("default", 50.0),
-            unit=d.get("unit", c4d.DESC_UNIT_NONE),
+            unit=d.get("unit", _DESC_UNIT_NONE),
             group=d.get("group", ""),
             desc=d.get("desc", ""),
             dd_items=d.get("dd_items", "Item 1\nItem 2\nItem 3"),
@@ -443,15 +471,15 @@ class UserDataDialog(gui.GeDialog):
         self.AddStaticText(0, flags=c4d.BFH_LEFT, name="单位:")
         self.AddComboBox(_cmbUnit, flags=c4d.BFH_SCALEFIT, cols=1)
         _units = [
-            (c4d.DESC_UNIT_NONE,       "无"),
-            (c4d.DESC_UNIT_METER,      "米 (m)"),
-            (c4d.DESC_UNIT_CENTIMETER, "厘米 (cm)"),
-            (c4d.DESC_UNIT_MILLIMETER, "毫米 (mm)"),
-            (c4d.DESC_UNIT_KILOMETER,  "千米 (km)"),
-            (c4d.DESC_UNIT_DEGREE,     "度 (°)"),
-            (c4d.DESC_UNIT_PERCENT,    "百分比 (%)"),
-            (c4d.DESC_UNIT_SECOND,     "秒 (s)"),
-            (c4d.DESC_UNIT_FRAME,      "帧 (f)"),
+            (_DESC_UNIT_NONE,       "无"),
+            (_DESC_UNIT_METER,      "米 (m)"),
+            (_DESC_UNIT_CENTIMETER, "厘米 (cm)"),
+            (_DESC_UNIT_MILLIMETER, "毫米 (mm)"),
+            (_DESC_UNIT_KILOMETER,  "千米 (km)"),
+            (_DESC_UNIT_DEGREE,     "度 (°)"),
+            (_DESC_UNIT_PERCENT,    "百分比 (%)"),
+            (_DESC_UNIT_SECOND,     "秒 (s)"),
+            (_DESC_UNIT_FRAME,      "帧 (f)"),
         ]
         for uid, ulabel in _units:
             self.AddChild(_cmbUnit, uid, ulabel)
@@ -640,7 +668,7 @@ class UserDataDialog(gui.GeDialog):
             self.SetReal(_edtMax, 100.0)
             self.SetReal(_edtStep, 1.0)
             self.SetReal(_edtDefault, 0.0)
-            self.SetInt32(_cmbUnit, c4d.DESC_UNIT_NONE)
+            self.SetInt32(_cmbUnit, _DESC_UNIT_NONE)
 
         # 启用/禁用
         for cid in (_edtName, _edtGroup, _edtDesc, _edtDDItems,
