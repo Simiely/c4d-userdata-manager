@@ -23,7 +23,7 @@ import json
 import os
 from typing import Optional
 
-__version__ = "1.2.2"
+__version__ = "1.2.1"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -98,6 +98,8 @@ _edtDesc    = 2209
 _edtDDItems = 2210
 
 _txtInfo = 2400
+# 动态列表内容组（嵌套在 ScrollGroup 内部，用于 LayoutFlushGroup 刷新）
+_gListContent = 2501
 
 # 动态生成的列表行控件 ID 基址
 # 每个条目行占用 4 个连续 ID
@@ -422,7 +424,7 @@ class UserDataDialog(gui.GeDialog):
         self.AddButton(_btnLoad,   flags=c4d.BFH_LEFT, initw=50, inith=24, name="加载")
         self.AddButton(_btnClear,  flags=c4d.BFH_LEFT, initw=50, inith=24, name="清空")
         # 预设下拉按钮（替代 C4D 2026 中已移除的 GePopupMenu）
-        self.AddPopupButton(_btnPreset, flags=c4d.BFH_LEFT, cols=1, initw=70)
+        self.AddPopupButton(_btnPreset, flags=c4d.BFH_LEFT, initw=70)
         self.SetPopup(_btnPreset, "预设 ▼")
         for i, p in enumerate(PRESETS):
             self.AddChild(_btnPreset, i, p["name"])
@@ -451,7 +453,9 @@ class UserDataDialog(gui.GeDialog):
         # 可滚动的条目列表（由 _refresh_list 动态填充）
         self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                               scrollflags=c4d.SCROLLGROUP_VERT)
-        self.ScrollGroupEnd(_gScroll)
+        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=1, rows=1, title="")
+        self.GroupEnd()  # _gListContent
+        self.GroupEnd()  # ScrollGroupBegin
         self.GroupEnd()  # _gList
 
         # 右侧属性面板
@@ -656,12 +660,12 @@ class UserDataDialog(gui.GeDialog):
     # 使用 ScrollGroup + 按钮行模拟列表
 
     def _refresh_list(self):
-        # 清除旧的动态控件
-        self.LayoutFlushGroup(_gScroll)
+        # 清除旧的列表行控件
+        self.LayoutFlushGroup(_gListContent)
 
-        # 重新构建可滚动的条目行
-        self.ScrollGroupBegin(_gScroll, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
-                              scrollflags=c4d.SCROLLGROUP_VERT)
+        # 重新构建条目行（在已存在的 ScrollGroup 内的 _gListContent 中）
+        self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
+                        cols=1, rows=len(self._entries) or 1, title="")
         for i, e in enumerate(self._entries):
             base = _ROW_BASE + i * _ROW_STRIDE
             is_sel = (i == self._sel)
@@ -688,7 +692,7 @@ class UserDataDialog(gui.GeDialog):
                                initw=100, name=e.display_value())
             self.GroupEnd()
 
-        self.ScrollGroupEnd(_gScroll)
+        self.GroupEnd()  # _gListContent
         self.LayoutChanged(_gScroll)
 
     # ── 属性面板 ───────────────────────────────────────────────────
