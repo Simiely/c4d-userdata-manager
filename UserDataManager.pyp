@@ -23,7 +23,7 @@ import json
 import os
 from typing import Optional
 
-__version__ = "1.3.1"
+__version__ = "2.1.0"
 
 
 # ─────────────────────────────────────────────────────────────────
