@@ -897,7 +897,7 @@ class UserDataCommandData(c4d.plugins.CommandData):
                 defaultw=640,
                 defaulth=520,
                 xpos=-1, ypos=-1,
-                dialogid=0, subid=0)
+                subid=0)
         else:
             self._dlg.Close()
             self._dlg = None
