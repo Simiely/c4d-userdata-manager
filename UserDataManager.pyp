@@ -133,16 +133,16 @@ class UDT:
     FILENAME = 9
 
     LABELS = {
-        FLOAT:    "Float",
-        INTEGER:  "Integer",
-        BOOL:     "Boolean",
-        COLOR:    "Color",
-        VECTOR:   "Vector",
-        ANGLE:    "Angle (°)",
-        PERCENT:  "Percentage",
-        STRING:   "String",
-        DROPDOWN: "Dropdown",
-        FILENAME: "Filename",
+        FLOAT:    "Float 浮点数",
+        INTEGER:  "Integer 整数",
+        BOOL:     "Boolean 布尔",
+        COLOR:    "Color 颜色",
+        VECTOR:   "Vector 向量",
+        ANGLE:    "Angle 角度 (°)",
+        PERCENT:  "Percentage 百分比",
+        STRING:   "String 字符串",
+        DROPDOWN: "Dropdown 下拉列表",
+        FILENAME: "Filename 文件路径",
     }
 
     # 类型 → C4D 内部类型（静态，只构建一次）
@@ -371,40 +371,40 @@ class Entry:
 # ─────────────────────────────────────────────────────────────────
 
 PRESETS = [
-    {"name": "Float",       "btn": "Float",     "entries": [Entry("Float",    UDT.FLOAT,   0, 100,   1, 50)]},
-    {"name": "Speed",       "btn": "Speed",     "entries": [Entry("Speed",    UDT.FLOAT,   0, 100,   1, 50)]},
-    {"name": "Strength",    "btn": "Strength",  "entries": [Entry("Strength", UDT.PERCENT, 0, 200,   1, 100)]},
-    {"name": "Opacity",     "btn": "Opacity",   "entries": [Entry("Opacity",  UDT.PERCENT, 0, 100,   1, 100)]},
-    {"name": "Scale",       "btn": "Scale",     "entries": [Entry("Scale",    UDT.PERCENT, 0, 500,   1, 100)]},
-    {"name": "Color",       "btn": "Color",     "entries": [Entry("Color",    UDT.COLOR,   0, 1,   0.01, 1)]},
-    {"name": "Position",    "btn": "Position",  "entries": [
-        Entry("Offset.X", UDT.FLOAT, -1000, 1000, 1, 0),
-        Entry("Offset.Y", UDT.FLOAT, -1000, 1000, 1, 0),
-        Entry("Offset.Z", UDT.FLOAT, -1000, 1000, 1, 0),
+    {"name": "浮点数",   "btn": "浮点数",   "entries": [Entry("浮点数",   UDT.FLOAT,   0, 100,   1, 50)]},
+    {"name": "速度",     "btn": "速度",     "entries": [Entry("速度",     UDT.FLOAT,   0, 100,   1, 50)]},
+    {"name": "强度",     "btn": "强度",     "entries": [Entry("强度",     UDT.PERCENT, 0, 200,   1, 100)]},
+    {"name": "透明度",   "btn": "透明度",   "entries": [Entry("透明度",   UDT.PERCENT, 0, 100,   1, 100)]},
+    {"name": "缩放",     "btn": "缩放",     "entries": [Entry("缩放",     UDT.PERCENT, 0, 500,   1, 100)]},
+    {"name": "颜色",     "btn": "颜色",     "entries": [Entry("颜色",     UDT.COLOR,   0, 1,   0.01, 1)]},
+    {"name": "位置偏移", "btn": "位置偏移", "entries": [
+        Entry("偏移.X", UDT.FLOAT, -1000, 1000, 1, 0),
+        Entry("偏移.Y", UDT.FLOAT, -1000, 1000, 1, 0),
+        Entry("偏移.Z", UDT.FLOAT, -1000, 1000, 1, 0),
     ]},
-    {"name": "Rotation",    "btn": "Rotation",  "entries": [
-        Entry("Rotate.X", UDT.ANGLE, 0, 360, 1, 0),
-        Entry("Rotate.Y", UDT.ANGLE, 0, 360, 1, 0),
-        Entry("Rotate.Z", UDT.ANGLE, 0, 360, 1, 0),
+    {"name": "旋转",     "btn": "旋转",     "entries": [
+        Entry("旋转.X", UDT.ANGLE, 0, 360, 1, 0),
+        Entry("旋转.Y", UDT.ANGLE, 0, 360, 1, 0),
+        Entry("旋转.Z", UDT.ANGLE, 0, 360, 1, 0),
     ]},
-    {"name": "Random Seed", "btn": "Random",    "entries": [
-        Entry("Seed",      UDT.INTEGER, 0, 99999, 1, 0),
-        Entry("Randomize", UDT.BOOL,    0, 1, 1, True),
+    {"name": "随机",     "btn": "随机",     "entries": [
+        Entry("种子",   UDT.INTEGER, 0, 99999, 1, 0),
+        Entry("随机化", UDT.BOOL,    0, 1, 1, True),
     ]},
-    {"name": "Count",       "btn": "Count",     "entries": [Entry("Count", UDT.INTEGER, 1, 1000, 1, 10)]},
-    {"name": "Enable",      "btn": "Enable",    "entries": [Entry("Enabled", UDT.BOOL, 0, 1, 1, True)]},
-    {"name": "Falloff",     "btn": "Falloff",   "entries": [
-        Entry("Radius",  UDT.FLOAT,   0, 1000, 1, 100),
-        Entry("Falloff", UDT.PERCENT, 0, 100,  1, 50),
+    {"name": "计数",     "btn": "计数",     "entries": [Entry("计数", UDT.INTEGER, 1, 1000, 1, 10)]},
+    {"name": "开关",     "btn": "开关",     "entries": [Entry("启用", UDT.BOOL, 0, 1, 1, True)]},
+    {"name": "衰减",     "btn": "衰减",     "entries": [
+        Entry("半径",  UDT.FLOAT,   0, 1000, 1, 100),
+        Entry("衰减",  UDT.PERCENT, 0, 100,  1, 50),
     ]},
-    {"name": "Weights",     "btn": "Weights",   "entries": [
-        Entry("Weight A", UDT.FLOAT, 0, 1, 0.01, 0.5),
-        Entry("Weight B", UDT.FLOAT, 0, 1, 0.01, 0.5),
+    {"name": "权重",     "btn": "权重",     "entries": [
+        Entry("权重A", UDT.FLOAT, 0, 1, 0.01, 0.5),
+        Entry("权重B", UDT.FLOAT, 0, 1, 0.01, 0.5),
     ]},
-    {"name": "Material",    "btn": "Material",  "entries": [
-        Entry("Metallic",  UDT.PERCENT, 0, 100, 1, 0),
-        Entry("Roughness", UDT.PERCENT, 0, 100, 1, 50),
-        Entry("Emission",  UDT.COLOR,   0, 1, 0.01, 0),
+    {"name": "材质",     "btn": "材质",     "entries": [
+        Entry("金属度",  UDT.PERCENT, 0, 100, 1, 0),
+        Entry("粗糙度",  UDT.PERCENT, 0, 100, 1, 50),
+        Entry("自发光",  UDT.COLOR,   0, 1, 0.01, 0),
     ]},
 ]
 
