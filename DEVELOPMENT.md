@@ -418,6 +418,160 @@ def _refresh_list(self):
 
 ---
 
+### 16. DESC_CUSTOMGUI=0 导致 FLOAT 等类型空值
+
+**现象：** FLOAT（浮点数、速度、偏移等）参数在 C4D 属性面板中显示为空，无法赋值。
+
+**根因：** 代码为所有类型强制设置了 `DESC_CUSTOMGUI`。`CUSTOMGUI_REALSLIDER` 常量在 C4D 2026 中不存在，`_c()` fallback 为 0。写入 `DESC_CUSTOMGUI=0` 后 C4D 无法正确渲染 FLOAT 类型的参数控件。
+
+```python
+# ❌ 错误 — CUSTOMGUI_REALSLIDER 不存在时 fallback 为 0
+_CUSTOMGUI_REALSLIDER = _c('CUSTOMGUI_REALSLIDER', 0)
+bc[c4d.DESC_CUSTOMGUI] = _CUSTOMGUI_REALSLIDER  # = 0，无效！
+```
+
+**解决方案：** 完全移除自定义 GUI 相关代码。让 C4D 使用各数据类型的默认控件。COLOR 类型使用 `DTYPE_COLOR` 默认即为颜色选择器，无需额外设置。
+
+```python
+# ✅ 正确 — 不设置 DESC_CUSTOMGUI，C4D 使用默认控件
+# build_bc() 中不再写入 DESC_CUSTOMGUI
+```
+
+**经验教训：**
+- 不存在的常量 fallback 为 0 后写入 `DESC_CUSTOMGUI` 会破坏参数渲染
+- `DTYPE_COLOR` 的默认 GUI 就是颜色选择器，无需 `CUSTOMGUI_COLORFIELD`
+- 各数据类型的默认控件由 C4D 内部处理，不要主动覆盖
+
+---
+
+### 17. PERCENT 类型用 0-1 内部存储
+
+**现象：** 预设中强度=100、透明度=100、缩放=100、衰减=50，在 C4D 中显示为 10000%、5000% 等异常大数值。
+
+**根因：** C4D 内部用 0-1 存储百分比值（1.0 = 100%），但代码按 0-100 直接写入。
+
+```python
+# ❌ 错误 — 按 UI 层 0-100 写入
+bc[c4d.DESC_DEFAULT] = 100.0  # C4D 显示为 10000%
+bc[c4d.DESC_MIN] = 0.0
+bc[c4d.DESC_MAX] = 200.0      # C4D 显示为 20000%
+
+# ✅ 正确 — 除以 100 转换为 C4D 内部 0-1
+scale = 100.0
+bc[c4d.DESC_DEFAULT] = 100.0 / scale  # = 1.0，C4D 显示 100%
+bc[c4d.DESC_MIN] = 0.0 / scale
+bc[c4d.DESC_MAX] = 200.0 / scale      # = 2.0，C4D 显示 200%
+```
+
+**经验教训：**
+- `DTYPE_REAL` + `DESC_UNIT_PERCENT` 时，C4D 期望值在 0-1 范围
+- 插件 UI 层可保持 0-100 范围（用户友好），在 `build_bc()` 和显式写入值时做转换
+- 同样适用于 `DESC_MIN` / `DESC_MAX` / `DESC_STEP`
+
+---
+
+### 18. DESC_UNIT 非必填时不要写入 0
+
+**现象：** FLOAT 类型（无单位）在 C4D 属性面板中显示为空。
+
+**根因：** 代码无条件设置 `DESC_UNIT`，对无单位类型也写入了 `DESC_UNIT = 0`，C4D 无法正确渲染。
+
+```python
+# ❌ 错误 — 无条件写入
+bc[c4d.DESC_UNIT] = u if u != _DESC_UNIT_NONE else self.unit
+# → 对 FLOAT：u=0, self.unit=0 → bc[DESC_UNIT] = 0，无效！
+
+# ✅ 正确 — 仅当存在有效单位时才写入
+if u != _DESC_UNIT_NONE:
+    bc[c4d.DESC_UNIT] = u
+elif self.unit != _DESC_UNIT_NONE:
+    bc[c4d.DESC_UNIT] = self.unit
+# → 对 FLOAT：都不设，C4D 使用默认
+```
+
+**经验教训：**
+- C4D 的 `BaseContainer` 中，值为 0 和未设置是两回事
+- `DESC_UNIT`, `DESC_CUSTOMGUI` 等参数只有在有实际值时写入
+- 对无单位的 FLOAT，不设置 `DESC_UNIT` 让 C4D 使用默认行为
+
+---
+
+### 19. AddUserData 后必须显式写入默认值
+
+**现象：** `DESC_DEFAULT` 设置了正确值，但参数在 C4D 中仍显示为空或默认值为 0。
+
+**根因：** `AddUserData()` 不保证从 `DESC_DEFAULT` 初始化参数值。依赖 C4D 版本和数据类型，可能出现默认值丢失。
+
+```python
+# ❌ 错误 — 只靠 AddUserData 初始化
+did = obj.AddUserData(bc)  # 不一定写入 DESC_DEFAULT
+
+# ✅ 正确 — 显式写入一次
+did = obj.AddUserData(bc)
+if did is not None:
+    obj[did] = entry.get_c4d_value()  # 强制设置参数值
+```
+
+**实现统一转换方法 `get_c4d_value()`：**
+
+```python
+def get_c4d_value(self):
+    """返回可直接写入对象参数值的 Python 对象"""
+    if self.dtype == UDT.BOOL:
+        return int(bool(self.default_v))       # 0 或 1
+    elif self.dtype == UDT.COLOR:
+        return self._parse_color(self.default_v)
+    elif self.dtype == UDT.VECTOR:
+        return c4d.Vector(self.default_v, ...)
+    elif self.dtype == UDT.INTEGER or self.dtype == UDT.DROPDOWN:
+        return int(float(self.default_v or 0))
+    elif self.dtype == UDT.PERCENT:
+        return float(self.default_v) / 100.0   # 0-1 转换
+    elif self.dtype in (UDT.STRING, UDT.FILENAME):
+        return str(self.default_v or "")
+    else:  # FLOAT, ANGLE
+        return float(self.default_v)
+```
+
+**经验教训：**
+- `AddUserData()` 只创建描述定义，不保证初始化值
+- 总是要在 `AddUserData()` 后用 `obj[did] = value` 设值
+- PERCENT 和 BOOL 需要特殊处理（0-1 转换和 bool→int）
+
+---
+
+### 20. GetUserDataContainer 迭代在 C4D 2026 返回元组
+
+**现象：** `TypeError: BaseList2D.RemoveUserData expected Description identifier, not tuple`
+
+**根因：** C4D 2026 中 `GetUserDataContainer()` 的迭代行为改变，`for did in udc` 产生 `(key, value)` 元组而非整数 key。
+
+```python
+# ❌ 错误 — C4D 2026 中 did 是元组
+udc = obj.GetUserDataContainer()
+for did in udc:                # ← 产生 (key, value) 元组！
+    obj.RemoveUserData(did)    # TypeError
+
+# ✅ 正确 — 兼容两种迭代行为
+udc = obj.GetUserDataContainer()
+if udc:
+    dids = []
+    for item in udc:
+        if isinstance(item, tuple):
+            dids.append(item[0])    # C4D 2026: (key, value)
+        else:
+            dids.append(item)       # C4D 2025 及更早: key
+    for did in reversed(dids):      # 倒序删除，避免索引偏移
+        obj.RemoveUserData(did)
+```
+
+**经验教训：**
+- C4D 2026 中 `BaseContainer` 迭代行为可能改变
+- 跨版本代码应做类型判断，不要假设迭代结果类型
+- 删除容器元素时应倒序遍历，避免索引偏移
+
+---
+
 ## 快速参考：C4D 2026 可用的 GeDialog 方法
 
 从 C4D 2025 迁移时，以下方法被确认**仍然可用**（完整列表）：
@@ -461,3 +615,7 @@ MenuFlushAll, MenuInitString, MenuSubBegin, MenuSubEnd,
 7. **关键错误要弹对话框。** `print()` 在 C4D 插件中等同于不存在，用户看不见。
 8. **build_bc() 的 DESC_DEFAULT 类型必须与 C4D 数据类型匹配。** DTYPE_LONG → int, DTYPE_REAL → float, DTYPE_BOOL → int(bool(...))，混用会导致默认值写入失败。
 9. **GeDialog 参数如果报 `'xxx' is an invalid keyword argument`，改为位置传参。** C4D 2026 中将部分边缘参数改为了 positional-only。
+10. **DESC_UNIT / DESC_CUSTOMGUI 只有存在有效值时才写入。** 值为 0 和未设置是两回事，写入 0 可能破坏参数渲染。
+11. **PERCENT 类型内部以 0-1 存储。** UI 层可以用 0-100，但写入 C4D 时必须除以 100。
+12. **AddUserData 后必须显式写入参数值。** `desc_default` 不可靠，用 `obj[did] = value` 强制初始化。
+13. **跨版本迭代容器时做类型判断。** C4D 2026 中 `GetUserDataContainer()` 迭代产生元组而非整数 key。
