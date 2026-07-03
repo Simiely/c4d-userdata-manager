@@ -947,7 +947,7 @@ class UserDataCommandData(c4d.plugins.CommandData):
         return self._dlg.Open(
             dlgtype=c4d.DLG_TYPE_ASYNC,
             pluginid=PLUGIN_ID,
-            defaultw=1000,
+            defaultw=1300,
             defaulth=600,
             xpos=-1, ypos=-1,
             subid=0)
