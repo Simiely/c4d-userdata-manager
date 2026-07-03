@@ -425,7 +425,7 @@ class UserDataDialog(gui.GeDialog):
         self.AddButton(_btnClear,  flags=c4d.BFH_LEFT, initw=50, inith=24, name="清空")
         # 预设下拉按钮（替代 C4D 2026 中已移除的 GePopupMenu）
         self.AddPopupButton(_btnPreset, flags=c4d.BFH_LEFT, initw=70)
-        self.SetPopup(_btnPreset, "预设 ▼")
+        self.SetString(_btnPreset, "预设 ▼")
         for i, p in enumerate(PRESETS):
             self.AddChild(_btnPreset, i, p["name"])
         self.AddButton(_btnApply,  flags=c4d.BFH_RIGHT, initw=120, inith=24, name="▸ 应用到对象")
