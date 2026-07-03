@@ -23,7 +23,7 @@ import json
 import os
 from typing import Optional
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -393,7 +393,8 @@ class UserDataDialog(gui.GeDialog):
 
     # ── 布局 ───────────────────────────────────────────────────────
 
-    def CreateLayout(self, parent_dlg):
+    def CreateLayout(self, parent_dlg=None):
+        # parent_dlg: C4D 2023 传入此参数，2026 不再传入；用默认值兼容两者
         self.SetTitle(f"{PLUGIN_NAME}  v{__version__}")
         self.GroupBegin(_gRoot, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
                         cols=1, rows=3, title="")
@@ -622,10 +623,11 @@ class UserDataDialog(gui.GeDialog):
     # ── 列表刷新 ───────────────────────────────────────────────────
 
     def _refresh_list(self):
-        self.FreezeListView(_lstMain)
+        # C4D 2026 移除了 FreezeListView/ThawListView，直接用即可
         self.SetListViewMode(_lstMain, c4d.LV_REPORT)
         # 清空
-        for i in range(self.GetListViewCount(_lstMain)):
+        cnt = self.GetListViewCount(_lstMain)
+        for i in range(cnt - 1, -1, -1):
             self.RemoveListViewItem(_lstMain, i)
         # 填充
         for i, e in enumerate(self._entries):
@@ -636,7 +638,6 @@ class UserDataDialog(gui.GeDialog):
         # 恢复选中
         if 0 <= self._sel < len(self._entries):
             self.SetSelectedListViewItem(_lstMain, self._sel)
-        self.ThawListView(_lstMain)
 
     # ── 属性面板 ───────────────────────────────────────────────────
 

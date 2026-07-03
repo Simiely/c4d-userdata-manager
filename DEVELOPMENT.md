@@ -227,3 +227,46 @@ dlg.Open(
 | 消息 | `BFM_INPUT` `BFM_INPUT_CHANNEL` `BFM_INPUT_KEYBOARD` `BFM_INPUT_VALUE` |
 | 键盘 | `KEY_DELETE` `KEY_BACKSPACE` |
 | 其他 | `UNDOTYPE_CHANGE` `DLG_TYPE_ASYNC` `LV_REPORT` `EventAdd` `Vector` `BaseContainer` |
+
+---
+
+## 11. C4D 2026 — `CreateLayout` 签名变更
+
+**现象：** C4D 2026 报 `TypeError: CreateLayout() missing 1 required positional argument: 'parent_dlg'`
+
+**根因：** C4D 2026 的 `GeDialog.CreateLayout()` 不再传入 `parent_dlg` 参数。旧版签名是 `CreateLayout(self, parent_dlg)`，新版是 `CreateLayout(self)`。
+
+**解决：** 用带默认值的方式兼容两个版本：
+
+```python
+def CreateLayout(self, parent_dlg=None):
+    ...
+```
+
+**教训：** C4D 跨版本开发时，所有 `GeDialog` 的重写方法都要注意参数签名变化。`CreateLayout`、`InitValues`、`Command` 等都可能在不同版本中增减参数。
+
+---
+
+## 12. C4D 2026 — `FreezeListView` / `ThawListView` 被移除
+
+**现象：** `AttributeError: 'UserDataDialog' object has no attribute 'FreezeListView'`
+
+**根因：** C4D 2026 Python SDK 移除了 `FreezeListView()` 和 `ThawListView()` 方法。这两个方法原是 ListView 批量操作时的性能优化（冻结重绘），新版 SDK 内部已优化，不再需要手动冻结。
+
+**解决：** 直接删除这俩调用即可。同时反向修复了原代码中 `RemoveListViewItem` 正向循环删除会跳项的 bug：
+
+```python
+# ❌ 旧代码（正向删除会跳项）
+for i in range(self.GetListViewCount(_lstMain)):
+    self.RemoveListViewItem(_lstMain, i)
+
+# ✅ 新代码（倒序删除，安全）
+cnt = self.GetListViewCount(_lstMain)
+for i in range(cnt - 1, -1, -1):
+    self.RemoveListViewItem(_lstMain, i)
+```
+
+**教训：** 
+- C4D 2026 移除了一些低频的 UI 辅助方法，批量操作 ListView 时不再需要手动冻结/解冻
+- 删除最后一个元素开始逆向遍历是通用安全的做法
+- 升级 SDK 版本时不仅要关注新增功能，还要检查被移除的 API
