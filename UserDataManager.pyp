@@ -470,7 +470,7 @@ class UserDataDialog(gui.GeDialog):
 
         # 类型
         self.AddStaticText(0, flags=c4d.BFH_LEFT, name="类型:")
-        self.AddComboBox(_cmbType, flags=c4d.BFH_SCALEFIT, cols=1)
+        self.AddComboBox(_cmbType, c4d.BFH_SCALEFIT, 1)
         for dt in UDT.list():
             self.AddChild(_cmbType, dt, UDT.name(dt))
 
@@ -496,7 +496,7 @@ class UserDataDialog(gui.GeDialog):
 
         # 单位
         self.AddStaticText(0, flags=c4d.BFH_LEFT, name="单位:")
-        self.AddComboBox(_cmbUnit, flags=c4d.BFH_SCALEFIT, cols=1)
+        self.AddComboBox(_cmbUnit, c4d.BFH_SCALEFIT, 1)
         _units = [
             (_DESC_UNIT_NONE,       "无"),
             (_DESC_UNIT_METER,      "米 (m)"),
