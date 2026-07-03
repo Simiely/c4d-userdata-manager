@@ -375,30 +375,46 @@ if errors:
 
 ### 15. ScrollGroup 内内容垂直居中
 
-**现象：** ScrollGroup 中动态添加的列表条目垂直居中显示，不在顶部排列。
+**现象：** ScrollGroup 中动态添加的列表条目垂直居中显示，不在顶部排列。经过多轮迭代，最终采用每行独立 Group 方案解决。
 
-**根因：** 在 `_refresh_list` 中对已存在的 `_gListContent` 组重复调用 `GroupBegin(id, cols=1, rows=N)`，但 `GroupBegin` 不会更新已存在组的布局参数。内容容器的 `rows` 仍为初始值（如 `rows=1`），导致所有子控件被塞入 1×1 网格中居中排列。
+**历史演进（了解背景）：**
 
-**解决方案：**
-1. `CreateLayout` 中将内容容器设为 `cols=4, rows=0`（4 列 + 动态行数）
-2. `_refresh_list` 中直接添加控件，不调用 `GroupBegin(容器id, ...)`
+**方案 A（已废弃）：** `cols=4, rows=0` 直接添加控件
+- 问题：Button 和 StaticText 默认高度不一致，且 `cols=4` 的 flow 布局在 C4D 中无法保证每行从顶部对齐
+- 根因：不同控件类型（Button / StaticText）在 grid flow 中的高度计算方式不同
+
+**方案 B（终版方案 ✅）：** `cols=1, rows=0` + 每行独立 Group
+
+**核心思路：** 内容容器设为单列 (`cols=1, rows=0`)，每行的 4 个控件用一个独立的 Group (`cols=4, rows=1`) 包裹。这样 C4D 的布局引擎会将每行作为一个整体单元，各行独立计算高度，不会互相影响。
 
 ```python
-# CreateLayout — 初始设置
-self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT, cols=4, rows=0, title="")
+# CreateLayout — 内容容器设为单列
+self.GroupBegin(_gListContent, flags=c4d.BFH_SCALEFIT | c4d.BFV_SCALEFIT,
+                cols=1, rows=0, title="")
 self.GroupEnd()
 
-# _refresh_list — 直接添加，不用再次 GroupBegin
+# _refresh_list — 每行用独立 Group 包裹
 def _refresh_list(self):
     self.LayoutFlushGroup(_gListContent)
     for i, e in enumerate(self._entries):
-        self.AddStaticText(...)   # 序号（占第 1 列）
-        self.AddButton(...)       # 名称（占第 2 列）
-        self.AddStaticText(...)   # 类型（占第 3 列）
-        self.AddStaticText(...)   # 默认值（占第 4 列）
-        # cols=4, rows=0 自动换行，每 4 个控件一行
+        # 每行独立 Group：cols=4, rows=1 保证 4 个控件在同一行
+        self.GroupBegin(0, flags=c4d.BFH_SCALEFIT, cols=4, rows=1, title="")
+        self.GroupBorderSpace(0, 0, 0, 0)
+
+        self.AddStaticText(..., inith=18, ...)   # 序号
+        self.AddButton(..., inith=18, ...)        # 名称（可点击选中）
+        self.AddStaticText(..., inith=18, ...)    # 类型
+        self.AddStaticText(..., inith=18, ...)    # 默认值
+
+        self.GroupEnd()
     self.LayoutChanged(_gScroll)
 ```
+
+**关键要点：**
+- `_gListContent` 用 `cols=1, rows=0`（单列动态行）
+- 每行的 4 个控件用 `GroupBegin(0, cols=4, rows=1)` 包裹
+- 所有控件统一设置 `inith=18` 确保行高一致
+- `GroupBorderSpace(0, 0, 0, 0)` 消除行内边距
 
 ---
 
