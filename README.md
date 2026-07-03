@@ -25,18 +25,24 @@ C4D 自带的用户数据创建体验不佳：
 
 ## 兼容性
 
-Cinema 4D 2023 / 2024 / 2025 / 2026（v1.2.1 修复了 C4D 2026 API 变更问题）
+| 版本 | 支持 |
+|------|------|
+| C4D 2023 | ✅ 已验证 |
+| C4D 2024 | ✅  |
+| C4D 2025 | ✅  |
+| C4D 2026 | ✅ 已验证（v1.2.3+） |
 
 ## 安装方法
 
-1. 下载 `UserDataManager.pyp` 文件
-2. 放到 C4D 的 **plugins** 文件夹：
+1. 下载 `c4d-userdata-manager_v1.2.3.zip`（或最新版本）
+2. 解压后得到 `UserDataManager.pyp` + `icon.png`
+3. 放到 C4D 的 **plugins** 文件夹：
    - **Windows**: `C:\Program Files\Maxon Cinema 4D 202X\plugins\`
    - **macOS**: `/Applications/Maxon Cinema 4D 202X/plugins/`
-3. 重启 C4D
-4. 菜单栏 → **扩展 (Extensions) → UserData Manager**
+4. 重启 C4D
+5. 菜单栏 → **扩展 (Extensions) → UserData Manager**
 
-> **重要**：请到 [plugincafe.maxon.net](https://plugincafe.maxon.net) 注册一个免费插件 ID，替换源码第 33 行的 `PLUGIN_ID = 1060001`，避免与其他插件冲突。
+> **重要**：请到 [plugincafe.maxon.net](https://plugincafe.maxon.net) 注册一个免费插件 ID，替换源码中的 `PLUGIN_ID = 1060001`，避免与其他插件冲突。
 
 ## 使用流程
 
@@ -49,30 +55,11 @@ Cinema 4D 2023 / 2024 / 2025 / 2026（v1.2.1 修复了 C4D 2026 API 变更问题
 ## 工作流示例
 
 1. 打开插件面板
-2. 点击「预设」→ 选择「Rotation 旋转」
+2. 点击「预设 ▼」→ 选择「Rotation 旋转」
 3. 在场景中选中一个 Null 对象
-4. 点击「应用到对象」
+4. 点击「▸ 应用到对象」
 5. 打开 Xpresso 编辑器，把 Null 拖进来
 6. Null 的用户数据端口现在有 Rotate.X / Rotate.Y / Rotate.Z，可以直接连接到其他节点
-
-## 截图
-
-```
-┌─ UserData Manager  v1.1 ───────────────────────────────┐
-│ ＋ － ⧉ ↑ ↓ │ 预设 保存 加载 清空 │  ▸ 应用到对象   │
-├──────────┬──────────────────────────────────────────────┤
-│ # │名称│类型│默认值 │ 属性                           │
-│ 1 │Speed│Float│50    │ 名称: [Speed              ]    │
-│ 2 │Color│Color│1,1,1│ 类型: [Float 浮点数    ▼]    │
-│ 3 │...  │     │      │ 分组: [                    ]    │
-│         │              │ 最小值: [0]  最大值: [100]    │
-│         │              │ 步幅: [1]   默认值: [50]      │
-│         │              │ 单位: [无              ▼]    │
-│         │              │ 说明: [                    ]    │
-├──────────┴──────────────────────────────────────────────┤
-│ 条目数: 3 | 选中: #1                                    │
-└─────────────────────────────────────────────────────────┘
-```
 
 ## 技术细节
 
@@ -80,6 +67,7 @@ Cinema 4D 2023 / 2024 / 2025 / 2026（v1.2.1 修复了 C4D 2026 API 变更问题
 - 纯 Python，基于 C4D Python API
 - 支持 Undo/Redo
 - JSON 模板格式，可版本控制
+- 跨版本兼容层（`_c()` 函数安全获取已移除的常量）
 
 ## License
 

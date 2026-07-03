@@ -1,41 +1,214 @@
 # 开发笔记
 
-记录开发过程中遇到的关键问题和解决思路。
+记录 C4D 跨版本插件开发中遇到的关键问题和解决思路，方便后续规避同类问题。
 
 ---
 
-## 1. C4D Python SDK 常量缺失
+## C4D 版本迁移清单
 
-**现象：** C4D 2026 报 `AttributeError: module 'c4d' has no attribute 'CUSTOMGUI_COLORFIELD'`
+从 C4D 2025 迁移到 2026 时，Python API 发生了大量破坏性变更。以下清单按严重程度排列：
 
-**根因：** C4D Python SDK 在每个版本中并非包含全部 C++ API 常量。`DESC_UNIT_NONE`、`CUSTOMGUI_COLORFIELD` 等一些低频使用的常量在 2026 版本中被移除。
+### 1. ListView 全套 API 被移除（破坏性最大）
 
-**解决：** 在模块顶部加入兼容层，用 `getattr` 动态获取，不存在时回退到已知的整数值。
+**现象：** `AttributeError: 'UserDataDialog' object has no attribute 'AddListView'`
+
+**根因：** C4D 2026 移除了以下 ListView 相关方法：
+
+| 被移除的方法 | 用途 |
+|---|---|
+| `AddListView(id, flags, cols)` | 创建列表控件 |
+| `SetListViewMode(id, mode)` | 设置显示模式 |
+| `SetListViewColumn(id, col, name, width)` | 设置列标题/宽度 |
+| `GetListViewCount(id)` | 获取行数 |
+| `RemoveListViewItem(id, row)` | 删除某行 |
+| `SetListViewItem(id, row, text, column)` | 设置单元格文本 |
+| `GetSelectedListViewItem(id)` | 获取选中行索引 |
+| `SetSelectedListViewItem(id, row)` | 设置选中行 |
+| `FreezeListView(id)` / `ThawListView(id)` | 冻结/解冻刷新 |
+
+**解决方案：** 用 `ScrollGroup` + 逐行动态按钮模拟多列列表：
+
+```python
+# 在 CreateLayout 中创建骨架
+self.ScrollGroupBegin(_gScroll, flags=..., scrollflags=c4d.SCROLLGROUP_VERT)
+self.GroupBegin(_gListContent, flags=..., cols=1, rows=1, title="")
+self.GroupEnd()  # _gListContent（由 _refresh_list 动态填充）
+self.GroupEnd()  # ScrollGroup
+```
+
+```python
+# 在 _refresh_list 中动态填充
+def _refresh_list(self):
+    self.LayoutFlushGroup(_gListContent)
+    self.GroupBegin(_gListContent, ..., cols=1, rows=len(self._entries) or 1)
+    for i, entry in enumerate(self._entries):
+        base = _ROW_BASE + i * _ROW_STRIDE
+        self.GroupBegin(base + 1000, ..., cols=4, rows=1)
+        self.AddStaticText(base,     ..., name=str(i+1))      # 序号
+        self.AddButton(base + 1,     ..., name=entry.name)    # 名称（可点击选中）
+        self.AddStaticText(base + 2, ..., name=UDT.name(...)) # 类型
+        self.AddStaticText(base + 3, ..., name=...)            # 默认值
+        self.GroupEnd()
+    self.GroupEnd()  # _gListContent
+    self.LayoutChanged(_gScroll)
+```
+
+点击 Name Button 时通过控件 ID 反推条目索引：
+
+```python
+def Command(self, mid, bc):
+    if _ROW_BASE <= mid < _ROW_BASE + 9999:
+        idx = (mid - _ROW_BASE) // _ROW_STRIDE
+        self._sel = idx
+```
+
+**关键要点：**
+- `LayoutFlushGroup` 只清空子控件，不删除组本身
+- 刷新时机：`LayoutFlushGroup` → 重建 → `LayoutChanged(父group)`
+- 必须嵌套一个中间 Group（`_gListContent`），不要直接 Flush ScrollGroup
+- 行控件 ID 用基准值 + 偏移量计算，确保不冲突
+
+---
+
+### 2. ScrollGroupEnd 被移除
+
+**现象：** `AttributeError: 'GeDialog' object has no attribute 'ScrollGroupEnd'`
+
+**解决方案：** 用 `GroupEnd()` 替代。C4D 2026 中 `ScrollGroupBegin` 的行为与 `GroupBegin` 一致，使用 `GroupEnd()` 收尾。
+
+```python
+# ❌ C4D 2025
+self.ScrollGroupBegin(id, ...)
+self.ScrollGroupEnd(id)
+
+# ✅ C4D 2026
+self.ScrollGroupBegin(id, ...)
+self.GroupEnd()
+```
+
+---
+
+### 3. GePopupMenu 被移除
+
+**现象：** `AttributeError: module 'c4d.gui' has no attribute 'GePopupMenu'`
+
+**解决方案：** 改用 `AddPopupButton`，它创建一个始终带下拉箭头的按钮，通过 `AddChild` 添加选项。
+
+```python
+# ❌ C4D 2025
+menu = gui.GePopupMenu()
+for i, p in enumerate(PRESETS):
+    menu.AddString(i, p["name"])
+result = menu.Open(self, x=0, y=0)
+
+# ✅ C4D 2026
+self.AddPopupButton(_btnPreset, flags=c4d.BFH_LEFT, initw=70)
+self.SetPopup(_btnPreset, "预设 ▼")
+for i, p in enumerate(PRESETS):
+    self.AddChild(_btnPreset, i, p["name"])
+
+# 在 Command 中获取选择
+def Command(self, mid, bc):
+    if mid == _btnPreset:
+        idx = self.GetInt32(_btnPreset)
+```
+
+**注意：** `AddPopupButton` 不接受 `cols` 参数（`'cols' is an invalid keyword argument`）。
+
+---
+
+### 4. gui.Question 被移除
+
+**现象：** `AttributeError: module 'c4d.gui' has no attribute 'Question'`
+
+**解决方案：** 改用 `gui.QuestionDialog`，接口完全兼容：
+
+```python
+# ❌ C4D 2025
+if gui.Question("确定删除?"):
+    ...
+
+# ✅ C4D 2026
+if gui.QuestionDialog("确定删除?"):
+    ...
+```
+
+---
+
+### 5. storage.LoadDialog / SaveDialog 参数变更
+
+**现象：** `TypeError: 'typeflags' is an invalid keyword argument for this function`
+
+**根因：** C4D 2026 将分散的关键字参数统一为标准的 `type`、`flags`、`title`、`def_file`、`def_path`、`force_suffix`。
+
+```python
+# ❌ C4D 2025
+fn = storage.LoadDialog(title="打开文件", flags=c4d.FILESELECT_LOAD,
+                        typeflags=c4d.FILESELECTTYPE_ANYTHING)
+
+# ✅ C4D 2026
+fn = storage.LoadDialog(
+    title="打开文件",
+    flags=c4d.FILESELECT_LOAD,
+    type=c4d.FILESELECTTYPE_ANYTHING,  # 注意：参数名从 typeflags → type
+    def_file="template.json")           # 可选
+
+# SaveDialog 同理
+fn = storage.SaveDialog(title="保存文件", flags=c4d.FILESELECT_SAVE,
+                        type=c4d.FILESELECTTYPE_ANYTHING,
+                        def_file="template.json")
+```
+
+---
+
+### 6. CreateLayout 签名变更
+
+**现象：** `TypeError: CreateLayout() missing 1 required positional argument: 'parent_dlg'`
+
+**根因：** C4D 2023 调用 `CreateLayout(self, parent_dlg)`，C4D 2026 调用 `CreateLayout(self)`。
+
+**解决方案：** 用默认参数兼容两个版本：
+
+```python
+def CreateLayout(self, parent_dlg=None):
+    # parent_dlg: C4D 2023 传入此参数，2026 不传
+    ...
+```
+
+---
+
+### 7. 常量不存在
+
+**现象：** `AttributeError: module 'c4d' has no attribute 'CUSTOMGUI_COLORFIELD'`
+
+**根因：** 低频使用的常量在 2026 中被移除。
+
+**解决方案：** 在模块顶部加兼容层：
 
 ```python
 def _c(name, fallback):
     return getattr(c4d, name, fallback)
 
-_DESC_UNIT_NONE = _c('DESC_UNIT_NONE', 0)      # 0
-_DESC_UNIT_METER = _c('DESC_UNIT_METER', 1)     # 1
-# ... 共 12 个常量
+_DESC_UNIT_NONE = _c('DESC_UNIT_NONE', 0)
+_DESC_UNIT_METER = _c('DESC_UNIT_METER', 1)
+# ... 低频常量都用 _c() 包裹
 ```
 
-**教训：** 不要假设 `c4d.XXX` 常量在所有版本中都存在。引用任何 `c4d.` 常量时都应该评估其被移除的可能性。低频常量（UI 相关、单位、自定义 GUI）是高危区。
+**风险判断：** UI 相关的常量（单位、自定义 GUI、边框样式）是高危区；数据类型常量（`DTYPE_REAL`、`DESC_NAME` 等）是稳定区。
 
 ---
 
-## 2. 对话框第二次打开崩溃
+### 8. 对话框第二次打开崩溃
 
 **现象：** 第一次打开正常，关闭后再次打开 → C4D 崩溃。
 
-**崩溃栈：** `Py_HashPointer` + `PyIter_Send` —— Python 尝试 hash 已释放的 C4D 对象。
+**崩溃栈：** `Py_HashPointer` + `PyIter_Send` — Python 尝试 hash 已释放的 C4D 对象。
 
-**根因：** `RestoreLayout()` 未正确处理。C4D 可能在用户关闭对话框后调用 `RestoreLayout` 恢复布局，如果该函数尝试 `Open()` 一个已经销毁的旧对话框，导致崩溃。
+**根因：** `RestoreLayout()` 未正确处理。C4D 可能在用户关闭对话框后调用 `RestoreLayout` 恢复布局。
 
-**解决：**
-1. `RestoreLayout` 直接返回 `True`（不做任何操作）
-2. `Execute` 作为唯一入口，每次执行时先尝试关闭旧的对话框（`try/except` 安全包裹），再创建新的
+**解决方案：**
+1. `RestoreLayout` 直接返回 `True`（no-op）
+2. `Execute` 作为唯一入口，每次执行时先安全关闭旧对话框，再创建新的
 
 ```python
 def Execute(self, doc):
@@ -52,43 +225,15 @@ def RestoreLayout(self, sec_ref):
     return True  # no-op，让 C4D 通过 Execute 重建
 ```
 
-**教训：** C4D 异步对话框有两个入口（`Execute` 和 `RestoreLayout`），后者容易被忽略。对异步对话框，`RestoreLayout` 做 no-op 是最安全的策略。
-
 ---
 
-## 3. GeDialog API 参数不存在
+### 9. 对话框显示空白
 
-**现象：** `TypeError: 'dialogid' is an invalid keyword argument for this function`
+**现象：** 异步对话框打开后完全空白，没有任何控件。
 
-**根因：** C4D Python 的 `GeDialog.Open()` 不接受 `dialogid` 参数（这个参数是 C++ API 的，Python 绑定中不存在）。同理，`GeDialog.IsOpen()` 方法也可能不存在。
+**根因：** 对话框的 Python 对象被垃圾回收了。`Execute()` 中用局部变量保存对话框时，函数返回后对象被回收，C4D 窗口失去 Python 回调连接。
 
-**解决：** 不使用任何"不确定存在"的方法或参数。用 `try/except` 包裹可能失败的方法调用。用状态跟踪替代 API 查询。
-
-```python
-# ❌ 不存在的 API
-self._dlg.Open(..., dialogid=0)
-self._dlg.IsOpen()
-
-# ✅ 安全的做法
-try:
-    self._dlg.Close()
-except Exception:
-    pass
-self._dlg = UserDataDialog()
-self._dlg.Open(...)
-```
-
-**教训：** C4D Python SDK 和 C++ SDK 的 API 并不完全一致。参考他人代码时要注意区分是 C++ 还是 Python。
-
----
-
-## 4. 对话框显示空白
-
-**现象：** 面板打开后完全空白，没有任何控件。
-
-**根因：** 异步对话框的 Python 对象被垃圾回收了。`Execute()` 中用局部变量 `dlg = Dialog()`，函数返回后 `dlg` 被回收，C4D 窗口失去 Python 回调连接，显示空白。
-
-**解决：** 用 `self._dlg` 保存对话框引用。
+**解决方案：** 用实例变量保持引用：
 
 ```python
 class UserDataCommandData(c4d.plugins.CommandData):
@@ -100,37 +245,48 @@ class UserDataCommandData(c4d.plugins.CommandData):
         ...
 ```
 
-**教训：** C4D Python 的对象生命周期管理需要手动介入。任何跨函数/跨消息需要存活的 C4D 对象，都必须保存在实例变量或全局变量中。
+---
+
+### 10. ListView 正向循环删除跳项
+
+**现象（代码审查发现）：** 原 ListView 的清除循环存在 bug。
+
+```python
+# ❌ 正向删除 — 删除 index 0 后，原 index 1 变成 index 0，下一次 i=1 跳过原 index 1
+for i in range(self.GetListViewCount(_lstMain)):
+    self.RemoveListViewItem(_lstMain, i)
+
+# ✅ 倒序删除 — 从末尾开始删，索引不受影响
+cnt = self.GetListViewCount(_lstMain)
+for i in range(cnt - 1, -1, -1):
+    self.RemoveListViewItem(_lstMain, i)
+```
 
 ---
 
-## 5. Undo 记录爆炸
+### 11. Undo 记录爆炸
 
 **现象：** 批量添加用户数据时，每一条 x 每一个对象都调用一次 `AddUndo`，undo 记录数量是 N×M。
 
-**解决：** 先对所有要修改的对象统一标记一次 Undo，再循环添加数据。
+**解决方案：** 先对所有要修改的对象统一标记 Undo，再循环添加数据：
 
 ```python
 doc.StartUndo()
-# 先标记所有对象（一个 undo 记录 / 对象）
 for obj in objs:
-    doc.AddUndo(c4d.UNDOTYPE_CHANGE, obj)
-# 再批量添加数据
+    doc.AddUndo(c4d.UNDOTYPE_CHANGE, obj)  # 一个 Undo 记录 / 对象
 for obj in objs:
     for entry in entries:
         obj.AddUserData(entry.build_bc())
 doc.EndUndo()
 ```
 
-**教训：** 在一个 `StartUndo` / `EndUndo` 块中，`AddUndo` 记录的是状态快照。多个 `AddUndo` 不会合并为一条 undo 记录，而是会产生多次撤销步骤。只在必要时对真正变化的对象做标记。
-
 ---
 
-## 6. 异常堆栈被静默吞掉
+### 12. 异常堆栈被静默吞掉
 
-**现象：** 插件报错但用户看不到任何提示。错误通过 `print()` 输出到 C4D 控制台，但控制台默认隐藏。
+**现象：** 插件报错但用户看不到任何提示（`print()` 输出到默认隐藏的控制台）。
 
-**解决：** 将所有运行时异常收集到列表中，通过 `gui.MessageDialog()` 显示给用户，最多显示前 5 条详情。
+**解决方案：** 收集异常，用 `gui.MessageDialog()` 显示：
 
 ```python
 errors = []
@@ -142,131 +298,41 @@ except Exception as ex:
 if errors:
     detail = "\n".join(errors[:5])
     gui.MessageDialog(f"失败: {len(errors)} 个\n\n{detail}")
-else:
-    gui.MessageDialog("✅ 全部成功")
 ```
 
-**教训：** `print()` 在 C4D 插件中基本等于"用户看不见"。关键错误必须通过对话框、状态栏或日志文件告知用户。
-
 ---
 
-## 7. JSON 模板加载无校验
+## 快速参考：C4D 2026 可用的 GeDialog 方法
 
-**现象：** 加载一个结构损坏的模板 JSON 文件会导致 `Entry.from_dict` 产生异常状态，后续操作可能崩溃。
+从 C4D 2025 迁移时，以下方法被确认**仍然可用**（完整列表）：
 
-**解决：** 在 `from_dict` 之前对数据结构做逐级校验：
-
-```python
-raw = data.get("entries")
-if not isinstance(raw, list):
-    return  # ❌ 格式错误
-for i, item in enumerate(raw):
-    if not isinstance(item, dict):
-        return  # ❌ 条目格式错误
-    if "name" not in item or "type" not in item:
-        return  # ❌ 缺少必要字段
-    if not isinstance(item["type"], int) or item["type"] not in UDT._ALL_TYPES:
-        return  # ❌ 类型值非法
-entries = [Entry.from_dict(e) for e in raw]
+```
+AddButton, AddStaticText, AddEditText, AddComboBox, AddChild,
+AddEditNumberArrows, AddEditNumber, AddSlider, AddCheckbox,
+AddRadioButton, AddRadioGroup, AddSeparatorH, AddSeparatorV,
+AddUserArea, AddCustomGui, AddPopupButton, AddColorField,
+AddMultiLineEditText, AddSubDialog, AddDlgGroup,
+GroupBegin, GroupEnd, GroupBorder, GroupBorderNoTitle,
+GroupBorderSpace, GroupSpace, GroupBeginInMenuLine,
+ScrollGroupBegin, TabGroupBegin,
+SetString, SetReal, SetInt32, SetBool, SetFloat, SetLong,
+SetFilename, SetTime, SetVector, SetColorField,
+GetString, GetReal, GetInt32, GetBool, GetFloat, GetLong,
+GetFilename, GetTime, GetVector, GetColorField, GetColorRGB,
+Enable, HideElement, IsVisible, IsActive, IsEnabled, IsOpen,
+LayoutChanged, LayoutChangedNoRedraw, LayoutFlushGroup, LayoutFlushDisableRedraw,
+FreeChildren, RemoveElement,
+SetTitle, Open, Close, GetId,
+MenuAddString, MenuAddCommand, MenuAddSeparator, MenuFinished,
+MenuFlushAll, MenuInitString, MenuSubBegin, MenuSubEnd,
 ```
 
-**教训：** 外部输入（文件、网络、用户输入）在任何时候都不可信。解序列化之前必须做类型检查和边界校验。
+## 开发建议
 
----
-
-## 8. Color 类型的默认值输入限制
-
-**现象：** 插件 UI 中 Color 类型的默认值只能输入一个浮点数（灰度值），无法设置 RGB 颜色。
-
-**原因：** `AddEditNumberArrows` 是单值输入控件。要实现 RGB 输入需要三个独立的数值输入框或一个文本输入框加上颜色解析。
-
-**当前策略：** 插件 UI 中只设置灰度默认值，具体颜色在应用到对象后通过 C4D 原生拾色器调整。这是有意为之的取舍——C4D 的拾色器比任何文本输入都好用。
-
-**教训：** 不是所有功能缺陷都值得在插件 UI 中解决。如果 C4D 原生工具做得更好，就让插件做"足够好"的事情，把精细调整留给原生工具。
-
----
-
-## 9. `Open()` 参数列表
-
-C4D Python 中 `GeDialog.Open()` 的有效参数（C4D 2023~2026 验证通过）：
-
-```python
-dlg.Open(
-    dlgtype,          # DLG_TYPE_ASYNC / DLG_TYPE_MODAL / ...
-    pluginid=0,       # 插件 ID，用于窗口管理
-    defaultw=0,       # 默认宽度
-    defaulth=0,       # 默认高度
-    xpos=-1, ypos=-1, # 位置，-1 为自动
-    subid=0           # 子窗口 ID
-)
-```
-
-> 注意：`dialogid` 参数在 Python API 中不存在。
-
----
-
-## 10. 后续开发备忘
-
-### 可能的改进方向
-
-- 支持在列表中**直接编辑**条目名称（当前需要点选后在属性面板修改）
-- 支持 Drag & Drop 调整条目顺序
-- 添加"应用到场景全部对象"选项
-- 预设系统的用户自定义（保存/管理自建预设）
-- 多语言界面支持
-
-### 已知无风险的 c4d 常量
-
-以下常量在 C4D R13~2026 中始终存在，可以直接使用：
-
-| 类别 | 常量 |
-|---|---|
-| 数据类型 | `DTYPE_REAL` `DTYPE_LONG` `DTYPE_BOOL` `DTYPE_COLOR` `DTYPE_VECTOR` `DTYPE_STRING` `DTYPE_FILENAME` |
-| 描述 ID | `DESC_NAME` `DESC_SHORT_NAME` `DESC_MIN` `DESC_MAX` `DESC_STEP` `DESC_DEFAULT` `DESC_UNIT` `DESC_CUSTOMGUI` |
-| 布局 | `BFH_LEFT` `BFH_RIGHT` `BFH_SCALEFIT` `BFV_SCALEFIT` |
-| 消息 | `BFM_INPUT` `BFM_INPUT_CHANNEL` `BFM_INPUT_KEYBOARD` `BFM_INPUT_VALUE` |
-| 键盘 | `KEY_DELETE` `KEY_BACKSPACE` |
-| 其他 | `UNDOTYPE_CHANGE` `DLG_TYPE_ASYNC` `LV_REPORT` `EventAdd` `Vector` `BaseContainer` |
-
----
-
-## 11. C4D 2026 — `CreateLayout` 签名变更
-
-**现象：** C4D 2026 报 `TypeError: CreateLayout() missing 1 required positional argument: 'parent_dlg'`
-
-**根因：** C4D 2026 的 `GeDialog.CreateLayout()` 不再传入 `parent_dlg` 参数。旧版签名是 `CreateLayout(self, parent_dlg)`，新版是 `CreateLayout(self)`。
-
-**解决：** 用带默认值的方式兼容两个版本：
-
-```python
-def CreateLayout(self, parent_dlg=None):
-    ...
-```
-
-**教训：** C4D 跨版本开发时，所有 `GeDialog` 的重写方法都要注意参数签名变化。`CreateLayout`、`InitValues`、`Command` 等都可能在不同版本中增减参数。
-
----
-
-## 12. C4D 2026 — `FreezeListView` / `ThawListView` 被移除
-
-**现象：** `AttributeError: 'UserDataDialog' object has no attribute 'FreezeListView'`
-
-**根因：** C4D 2026 Python SDK 移除了 `FreezeListView()` 和 `ThawListView()` 方法。这两个方法原是 ListView 批量操作时的性能优化（冻结重绘），新版 SDK 内部已优化，不再需要手动冻结。
-
-**解决：** 直接删除这俩调用即可。同时反向修复了原代码中 `RemoveListViewItem` 正向循环删除会跳项的 bug：
-
-```python
-# ❌ 旧代码（正向删除会跳项）
-for i in range(self.GetListViewCount(_lstMain)):
-    self.RemoveListViewItem(_lstMain, i)
-
-# ✅ 新代码（倒序删除，安全）
-cnt = self.GetListViewCount(_lstMain)
-for i in range(cnt - 1, -1, -1):
-    self.RemoveListViewItem(_lstMain, i)
-```
-
-**教训：** 
-- C4D 2026 移除了一些低频的 UI 辅助方法，批量操作 ListView 时不再需要手动冻结/解冻
-- 删除最后一个元素开始逆向遍历是通用安全的做法
-- 升级 SDK 版本时不仅要关注新增功能，还要检查被移除的 API
+1. **先查 SDK 文档再写代码。** C4D 每次大版本都可能移除/重命名 API，2023→2026 之间的破坏性变更尤其多。
+2. **动态控件用 LayoutFlushGroup + 内容组。** 不要重建 Group/ScrollGroup 本身，只刷新内部内容。
+3. **控件 ID 用基准值 + 偏移。** 动态生成的控件需要一个 ID 范围，`_ROW_BASE + index * stride + offset` 是最常见的模式。
+4. **常量全部用 `_c()` 包裹。** 不确定是否存在的常量一律用 `getattr` 回退，避免运行时崩溃。
+5. **异步对话框必须保持引用。** 用实例变量存对话框对象，防止被 Python GC 回收。
+6. **外部输入必须校验。** JSON 模板加载时需要做类型检查，任何用户提供的文件都不可信。
+7. **关键错误要弹对话框。** `print()` 在 C4D 插件中等同于不存在，用户看不见。
