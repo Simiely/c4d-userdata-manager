@@ -18,8 +18,9 @@ License : MIT
 """
 
 import c4d
-from c4d import gui, storage
+from c4d import gui, storage, bitmaps
 import json
+import os
 from typing import Optional
 
 __version__ = "1.1.0"
@@ -33,6 +34,9 @@ __version__ = "1.1.0"
 PLUGIN_ID   = 1060001
 PLUGIN_NAME = "UserData Manager"
 PLUGIN_HELP = "快速创建和管理用户数据，供 Xpresso 使用"
+
+# 插件所在目录（用于加载图标）
+PLUGIN_DIR = os.path.dirname(__file__)
 
 # ── 控件 ID ───────────────────────────────────────────────────────
 _gRoot   = 1000
@@ -874,9 +878,25 @@ class UserDataCommandData(c4d.plugins.CommandData):
         return PLUGIN_ID
 
 
+def _load_icon():
+    """加载插件图标，失败时返回 None"""
+    # 按优先级尝试不同尺寸
+    for name in ("icon.png", "icon_32.png", "icon_64.png"):
+        path = os.path.join(PLUGIN_DIR, name)
+        if os.path.isfile(path):
+            bmp = bitmaps.BaseBitmap()
+            if bmp.InitWith(path)[0] == c4d.IMAGERESULT_OK:
+                return bmp
+    return None
+
+
 def main():
     """C4D 插件入口"""
-    icon = None  # 可用 c4d.bitmaps.BaseBitmap 加载图标
+    icon = _load_icon()
+    if icon:
+        print(f"[UserDataManager] 图标加载成功")
+    else:
+        print(f"[UserDataManager] 未找到图标文件，使用默认图标")
     return c4d.plugins.RegisterCommandPlugin(
         id=PLUGIN_ID,
         str=PLUGIN_NAME,
