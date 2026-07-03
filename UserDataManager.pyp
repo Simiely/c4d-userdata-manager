@@ -692,11 +692,7 @@ class UserDataDialog(gui.GeDialog):
             gui.MessageDialog("请在场景中选择一个或多个对象。")
             return
 
-        # 确认对话框
-        names = "\n".join(obj.GetName() for obj in objs[:5])
-        if len(objs) > 5:
-            names += f"\n...及其他 {len(objs)-5} 个对象"
-        if not gui.QuestionDialog(f"确定要清空以下对象的所有用户数据吗？\n\n{names}"):
+        if not gui.QuestionDialog(f"确定要清空 {len(objs)} 个选中对象的所有用户数据吗？"):
             return
 
         removed = 0
@@ -705,10 +701,15 @@ class UserDataDialog(gui.GeDialog):
             if not obj:
                 continue
             doc.AddUndo(c4d.UNDOTYPE_CHANGE, obj)
-            # 遍历并删除所有用户数据
+            # GetUserDataContainer 返回的容器在 C4D 2026 中迭代产生 (key, value) 元组
             udc = obj.GetUserDataContainer()
             if udc:
-                dids = [did for did in udc]
+                dids = []
+                for item in udc:
+                    if isinstance(item, tuple):
+                        dids.append(item[0])
+                    else:
+                        dids.append(item)
                 for did in reversed(dids):
                     if obj.RemoveUserData(did):
                         removed += 1
