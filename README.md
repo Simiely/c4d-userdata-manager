@@ -1,6 +1,8 @@
 # C4D UserData Manager
 
 > 轻量级 Cinema 4D 插件，用于快速创建和管理用户数据 (User Data)，供 Xpresso / Python / 表达式直接调用。
+>
+> **版本：** v2.1.0 | **兼容：** C4D 2023 – 2026 | **协议：** MIT
 
 ## 为什么需要它
 
@@ -28,20 +30,15 @@ C4D 自带的用户数据创建体验不佳：
 
 | 版本 | 支持 |
 |------|------|
-| C4D 2023 | ✅ |
-| C4D 2024 | ✅ |
-| C4D 2025 | ✅ |
-| C4D 2026 | ✅ |
+| C4D 2023 – 2026 | ✅（v2.1.0 已修复 2026 兼容：ListView 替代、GetUserDataContainer 元组迭代等） |
 
 ## 安装方法
 
-1. 下载最新版本 zip 包
-2. 解压后得到 `UserDataManager.pyp` + `icon.png`
-3. 放到 C4D 的 **plugins** 文件夹：
+1. 下载最新版本 zip 包（`UserDataManager_v2.1.0.zip`，含 `UserDataManager.pyp` + `icon.png`）
+2. 放到 C4D 的 **plugins** 文件夹：
    - **Windows**: `C:\Program Files\Maxon Cinema 4D 202X\plugins\`
    - **macOS**: `/Applications/Maxon Cinema 4D 202X/plugins/`
-4. 重启 C4D
-5. 菜单栏 → **扩展 (Extensions) → UserData Manager**
+3. 重启 C4D → 菜单栏 → **扩展 (Extensions) → UserData Manager**
 
 > **重要**：请到 [plugincafe.maxon.net](https://plugincafe.maxon.net) 注册一个免费插件 ID，替换源码中的 `PLUGIN_ID = 1060001`，避免与其他插件冲突。
 
@@ -49,8 +46,8 @@ C4D 自带的用户数据创建体验不佳：
 
 ```
 ① 打开插件 → ② 添加条目或点预设 → ③ 编辑属性 → ④ 选中场景对象 → ⑤ 点"应用到对象"
-                                                                         ↓
-                                                             Xpresso 里拖入对象即可看到用户数据端口
+                                                                        ↓
+                                                            Xpresso 里拖入对象即可看到用户数据端口
 ```
 
 ## 工作流示例
@@ -79,6 +76,12 @@ C4D 自带的用户数据创建体验不佳：
 - 支持 Undo/Redo，撤销历史有清晰命名
 - JSON 模板格式，可版本控制
 - 跨版本兼容层（`_c()` 函数安全获取已移除的常量）
+
+## 文档
+
+- **更新日志**：见 [CHANGELOG.md](./CHANGELOG.md)
+- **开发文档**：见 [DEVELOPMENT.md](./DEVELOPMENT.md)（C4D 2026 迁移清单 + 20 条问题记录）
+- **项目规则（AI 用）**：见 [AGENTS.md](./AGENTS.md)（技术栈、关键坑、约定）
 
 ## License
 
