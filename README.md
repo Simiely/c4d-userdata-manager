@@ -1,3 +1,12 @@
+> [!IMPORTANT]
+> ## 📦 本仓库已归档 —— 请到统一仓库下载
+> 本插件已并入 **[Simiely/c4d-tools](https://github.com/Simiely/c4d-tools)**（`plugins/c4d-userdata-manager/`），
+> 后续更新与问题修复都在 c4d-tools 统一维护，**本仓库只读、不再更新**。
+>
+> 最新版源码：https://github.com/Simiely/c4d-tools/tree/main/plugins/c4d-userdata-manager
+
+---
+
 # C4D UserData Manager
 
 > 轻量级 Cinema 4D 插件，用于快速创建和管理用户数据 (User Data)，供 Xpresso / Python / 表达式直接调用。
